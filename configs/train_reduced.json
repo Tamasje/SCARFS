@@ -1,0 +1,18 @@
+{
+  "data": {
+    "database_path": "Database_FINAL.parquet",
+    "input_species": "active",
+    "target_species": "active",
+    "val_fraction": 0.2,
+    "split_by_case": true,
+    "inlet_conversion_threshold": 0.05,
+    "inlet_weight": 5.0,
+    "species_weights": {"C2H4": 150, "C3H6": 100, "CH4": 20, "H2": 10},
+    "composition_feature_range": [-1.0, 1.0],
+    "seed": 0
+  },
+  "model": {"kind": "reduced", "hidden": [256, 256, 128], "activation": "silu"},
+  "optim": {"lr": 0.001, "weight_decay": 1e-6, "epochs": 200, "batch_size": 4096, "grad_clip": 1.0, "patience": 20},
+  "loss": {"atom_balance_weight": 0.0},
+  "output_dir": "runs/reduced"
+}

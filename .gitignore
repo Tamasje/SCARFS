@@ -31,3 +31,4 @@ __pycache__/
 *.onnx
 runs/
 checkpoints/
+sanity_figures/

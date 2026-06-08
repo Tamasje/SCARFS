@@ -1,0 +1,23 @@
+# SCARFS ML pipeline dependencies.
+#
+# Local (this repo's tests + a-priori harness + plotting + sanity check) needs only the CORE set.
+# Full data generation (CRACKSIM) and training (PyTorch) run on the HPC.
+
+# --- core (local + HPC) ---
+numpy>=1.24
+pandas>=1.5
+matplotlib>=3.6
+
+# --- a-priori harness extras (optional; numpy fallbacks exist) ---
+scipy>=1.10          # Sobol sampling + KDTree nearest-neighbour baseline
+pyarrow>=12          # read/write the Parquet database
+
+# --- training (HPC) ---
+torch>=2.0
+pyyaml>=6.0          # only if using .yaml configs (JSON configs need no extra dep)
+
+# --- data generation (HPC; plus the bundled CRACKSIM DLL + chem.inp/transport) ---
+cantera>=3.0
+
+# --- dev ---
+pytest>=7.0

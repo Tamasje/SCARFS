@@ -1,0 +1,24 @@
+{
+  "data": {
+    "database_path": "Database_FINAL.parquet",
+    "input_species": "dry_all",
+    "target_species": "active",
+    "val_fraction": 0.2,
+    "split_by_case": true,
+    "inlet_conversion_threshold": 0.05,
+    "inlet_weight": 5.0,
+    "species_weights": {"C2H4": 150, "C3H6": 100, "CH4": 20, "H2": 10},
+    "composition_feature_range": [0.0, 1.0],
+    "seed": 0
+  },
+  "model": {
+    "kind": "neuralcoil",
+    "latent_dim": 6,
+    "decoder_hidden": [128, 256],
+    "rate_hidden": [128, 128],
+    "activation": "silu"
+  },
+  "optim": {"lr": 0.001, "weight_decay": 1e-6, "epochs": 300, "batch_size": 4096, "grad_clip": 1.0, "patience": 25},
+  "loss": {"recon_weight": 1.0, "manifold_weight": 0.1, "noise_std": 0.05, "unroll_steps": 1},
+  "output_dir": "runs/neuralcoil"
+}
