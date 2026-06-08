@@ -146,7 +146,7 @@ class CSTR:
 
         if steady:
             sim.advance_to_steady_state()
-            states.append(self.cstr.thermo.state, t = np.infty)
+            states.append(self.cstr.thermo.state, t = np.inf)
 
         return states
 
@@ -356,8 +356,8 @@ class surfaceCSTR:
 
         if steady:
             sim.advance_to_steady_state()
-            states.append(self.cstr.thermo.state, t = np.infty)
-            surfstates.append(self.rsurf.thermo.state, t = np.infty)
+            states.append(self.cstr.thermo.state, t = np.inf)
+            surfstates.append(self.rsurf.thermo.state, t = np.inf)
 
         return states, surfstates
 
@@ -550,7 +550,7 @@ class PFR:
     def set_inlet_TPY(self, T, P, Y):
         self.gas.TPY = T, P, Y
 
-    def solve(self, length, nsteps, stop_rt = np.infty,
+    def solve(self, length, nsteps, stop_rt = np.inf,
                     solver_rtol = 1e-9, solver_atol = 1e-15):
         """
         Solve the reactor model.
@@ -769,7 +769,7 @@ class surfacePFR:
     def set_inlet_TPY(self, T, P, Y):
         self.gas.TPY = T, P, Y
 
-    def solve(self, length, nsteps, stop_rt = np.infty,
+    def solve(self, length, nsteps, stop_rt = np.inf,
                     solver_rtol = 1e-9, solver_atol = 1e-15):
         """
         Solve the reactor model.
@@ -982,7 +982,7 @@ class customPFR:
     def set_inlet_TPY(self, T, P, Y):
         self.gas.TPY = T, P, Y
 
-    def solve(self, length, nsteps, stop_rt = np.infty,
+    def solve(self, length, nsteps, stop_rt = np.inf,
                     solver_rtol = 1e-9, solver_atol = 1e-15):
         """
         Solve the reactor model.
@@ -1013,7 +1013,12 @@ class customPFR:
         """
         y0 = np.hstack((self.gas.T, self.gas.P, self.gas.Y))
         restime = 0.0
-        u = self.mdot / self.gas.density 
+        # Superficial velocity u = mdot / (rho * A). The `/ self.A` was previously missing here and
+        # at the loop update below (cf. the correct `PFR.solve`), making the stored `tau`/`velocity`
+        # extras too large by a factor of A = pi*D^2/4. Those extras are NOT exported to the CSV
+        # database, so the stored data (T, P, Y, rates) was unaffected; fixed for correctness only
+        # (see DIAGNOSIS.md, fix F5).
+        u = self.mdot / self.gas.density / self.A
         dz = length / nsteps if stop_rt > 1e6 else u * stop_rt / nsteps
         r = self.rr(self.gas)   #self.rr(self.gas) is CRACKSIM_rates_DLL(self.gas) mol/l/s
         rr = r*self.gas.molecular_weights
@@ -1037,7 +1042,7 @@ class customPFR:
         while solver.successful() and solver.t < length and restime < stop_rt:
             solver.integrate(solver.t + dz)
             self.set_state(solver.y)
-            u = self.mdot / self.gas.density
+            u = self.mdot / self.gas.density / self.A  # F5: include cross-section (see above)
             restime = restime + dz/u
             r = self.rr(self.gas)
             rr = r*self.gas.molecular_weights
