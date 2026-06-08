@@ -1,0 +1,33 @@
+# Large reference docs & compiled binaries (not tracked in git)
+*.pdf
+*.dll
+
+# Generated Cantera mechanism & bulk simulation outputs
+chem.yaml
+Database_FINAL.csv
+Database_FINAL.parquet
+worker_*.parquet
+*.parquet
+
+# Logs / scratch
+*.log
+logfile.txt
+C2KYAML_log.txt
+
+# Python / Jupyter / IDE
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+.idea/
+.vscode/
+.pytest_cache/
+
+# ML training artifacts (kept on HPC, not in repo)
+*.h5
+*.keras
+*.pt
+*.pth
+*.onnx
+runs/
+checkpoints/
