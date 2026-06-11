@@ -775,9 +775,23 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         "thermo_missing_species": list(thermo_dry.missing),
         "n_absorption_clipped_train": int(n_abs_clipped),
     }
+    # export-time safety stats: train latent envelope (UDF OOD clamp) and the energy-clamp
+    # bound (plan §3: clamp from the FULL data range x1.3 — never a prediction-falsifying p99)
+    with _torch.no_grad():
+        z_train = (
+            model.encode(_torch.as_tensor(X_comp_train, dtype=_torch.float32, device=device))
+            .cpu().numpy()
+        )
+    export_stats = {
+        "latent_env_min": z_train.min(axis=0).tolist(),
+        "latent_env_max": z_train.max(axis=0).tolist(),
+        "absorption_train_max": float(absorption_train.max()),
+        "energy_clamp": float(1.3 * absorption_train.max()),
+    }
     _save_artifacts_merged(cfg, model, bundle, metrics, energy_active,
                            linear_comp_scaler, rate_scaler, arcsinh_latent_scale,
-                           energy_calibration={"scale": energy_scale, "floor": 0.0})
+                           energy_calibration={"scale": energy_scale, "floor": 0.0},
+                           export_stats=export_stats)
     return metrics
 
 
@@ -812,6 +826,7 @@ def _save_artifacts_merged(
     rate_scaler,
     arcsinh_latent_scale: np.ndarray,
     energy_calibration: dict | None = None,
+    export_stats: dict | None = None,
 ) -> None:
     """Persist merged-model artifacts.
 
@@ -852,6 +867,7 @@ def _save_artifacts_merged(
         "energy_calibration": energy_calibration or {"scale": 1.0, "floor": 0.0},
         "rate_source": getattr(bundle.scalers, "rate_source", "r_mass"),
         "mech_yaml": cfg.data.mech_yaml,
+        "export_stats": export_stats or {},
         "split_case_ids": metrics.get("split_case_ids", {}),
         "config_echo": asdict(cfg),
     }
