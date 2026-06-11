@@ -269,11 +269,18 @@ def enthalpy_aware_weights(
     *,
     h_mass_fn=None,
     floor: float = 1.0,
+    cap: float = 10.0,
 ) -> np.ndarray:
     """Per-species weight vector ∝ train-mean share of |h_i · rate_i| (ONLY on physical-rate head).
 
-    If ``h_mass_fn`` is None or enthalpy data is unavailable, returns uniform weights (all 1.0).
-    The weight vector is normalised so the minimum is ``floor`` (default 1.0).
+    Weights are BOUNDED to ``[floor, cap]`` via ``w_i = floor + (cap − floor)·share_i/max(share)``.
+    Energy-flux shares span ~7 orders of magnitude across the energy-active set; an unbounded
+    (min-normalised) weighting collapses the rate loss onto the single largest-|h·ω| species and
+    starves every other output (observed: spread 1→2.5e7 ⇒ near-zero trained rates). The bounded
+    form keeps the design intent — mild emphasis on energy carriers, comparable to the colleague's
+    validated [1, 25] clip — while every species keeps a meaningful gradient.
+
+    If ``h_mass_fn`` is None or enthalpy data is unavailable, returns uniform weights (all floor).
 
     Parameters
     ----------
@@ -326,13 +333,11 @@ def enthalpy_aware_weights(
         return np.full(len(target_species), floor, dtype=float)
 
     shares = energy_per_species / total  # normalised shares
-    # normalise so minimum == floor
-    min_share = shares.min()
-    if min_share <= 0:
+    max_share = shares.max()
+    if max_share <= 0:
         return np.full(len(target_species), floor, dtype=float)
-    weights = (shares / min_share) * floor
-    weights = np.clip(weights, floor, None)
-    return weights
+    weights = floor + (cap - floor) * (shares / max_share)
+    return np.clip(weights, floor, cap)
 
 
 # ---------------------------------------------------------------------------

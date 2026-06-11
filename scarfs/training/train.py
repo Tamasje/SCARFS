@@ -469,6 +469,7 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
         sigma_active=sigma_active,
         sigma_comp_all=sigma_comp_all,
         active_col_idx=active_col_idx,
+        energy_arcsinh_scale=float(extras.get("energy_arcsinh_scale", 1.0)),
         rate_weight=cfg.loss.rate_weight,
         latent_source_weight=cfg.loss.latent_source_weight,
         energy_weight=cfg.loss.energy_weight,
@@ -717,6 +718,7 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         "molar_mass": thermo_active.molar_mass,
         "element_matrix": thermo_active.element_matrix,
         "absorption_from_rates_fn": _absorption_from_rates,
+        "energy_arcsinh_scale": energy_scale,
     }
 
     optimiser = torch.optim.AdamW(model.parameters(), lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)

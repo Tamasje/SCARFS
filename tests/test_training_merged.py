@@ -230,8 +230,13 @@ def test_enthalpy_weights_high_species(synthetic_df_merged, merged_schema):
     assert np.all(w >= 1.0), f"Weight below floor: {w}"
 
 
-def test_enthalpy_weights_minimum_is_floor(synthetic_df_merged, merged_schema):
-    """Minimum weight must equal the floor (normalisation check)."""
+def test_enthalpy_weights_bounded_floor_to_cap(synthetic_df_merged, merged_schema):
+    """Weights are bounded to [floor, cap]: max share gets cap; tiny shares stay near floor.
+
+    The unbounded (min-normalised) form let energy-flux shares spanning ~7 orders of
+    magnitude collapse the rate loss onto one species (observed spread 1→2.5e7 on stride5);
+    the bounded contract caps the emphasis while every species keeps a gradient.
+    """
     # arrange
     schema = merged_schema
     df = synthetic_df_merged
@@ -246,9 +251,11 @@ def test_enthalpy_weights_minimum_is_floor(synthetic_df_merged, merged_schema):
         return h
 
     # act
-    w = enthalpy_aware_weights(df, schema, species, h_mass_fn=h_mass_fn, floor=1.0)
+    w = enthalpy_aware_weights(df, schema, species, h_mass_fn=h_mass_fn, floor=1.0, cap=10.0)
     # assert
-    assert np.isclose(w.min(), 1.0), f"Min weight {w.min()} != 1.0"
+    assert np.isclose(w.max(), 10.0), f"Max weight {w.max()} != cap 10.0"
+    assert np.all((w >= 1.0) & (w <= 10.0)), f"Weights out of [floor, cap]: {w}"
+    assert w.min() < 1.1, f"Tiny-share species should sit near the floor: {w}"
 
 
 # ---------------------------------------------------------------------------

@@ -177,42 +177,60 @@ def latent_source_loss(
     return _mse(pred_t, tgt_t).mean()
 
 
+def _weighted_mean(err: torch.Tensor, row_weights: torch.Tensor | None) -> torch.Tensor:
+    """Mean of per-row errors, optionally weighted (weights broadcast over the batch)."""
+    if row_weights is None:
+        return err.mean()
+    return (err * row_weights).sum() / row_weights.sum().clamp(min=1e-12)
+
+
 def energy_rate_tied_loss(
     absorption_from_rates: torch.Tensor,
     absorption_target: torch.Tensor,
+    scale: torch.Tensor | float = 1.0,
+    row_weights: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """F3 rate-tied energy tie: MSE between rates-derived absorption and the DB target.
+    """F3 rate-tied energy tie in arcsinh space: rates-derived absorption vs the DB target.
 
-    Both tensors are ``(batch,)`` [J m-3 s-1].  No winsorization applied.
+    Both tensors are ``(batch,)`` [J m-3 s-1].  ``scale`` is a fixed physical scale (median
+    train absorption) so the loss is O(1) and scale-invariant in the tail.  arcsinh — not
+    ``log(clamp(·, 1))`` — keeps the gradient ALIVE when the rate-derived value is negative
+    (early training: Σh·ω̂ of random rates is negative for ~half the rows; a clamped log
+    zeroes those gradients and the energy tie never pulls the rates positive).
+    No winsorization applied.  ``row_weights`` carries the tail-stratified emphasis.
     """
-    # use relative MSE in log-space for scale-invariant tail sensitivity
-    eps = 1.0  # additive floor to avoid log(0); absorption is strictly positive
-    pred_log = torch.log(absorption_from_rates.clamp(min=eps))
-    tgt_log = torch.log(absorption_target.clamp(min=eps))
-    return _mse(pred_log, tgt_log).mean()
+    pred_t = torch.arcsinh(absorption_from_rates / scale)
+    tgt_t = torch.arcsinh(absorption_target / scale)
+    return _weighted_mean(_mse(pred_t, tgt_t), row_weights)
 
 
 def energy_distill_loss(
     absorption_head: torch.Tensor,
     absorption_from_rates_stopgrad: torch.Tensor,
+    scale: torch.Tensor | float = 1.0,
+    row_weights: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Distillation term: |Ŝ_E_head − stopgrad(rate-derived Ŝ_E)|, MSE.
+    """Distillation term: head vs stopgrad(rate-derived), arcsinh space.
 
-    Forces the cheap head toward the physically-consistent rate-derived value.
-    ``absorption_from_rates_stopgrad`` should have its gradient detached by the caller.
+    Raw-unit MSE on absorptions (1e6–1e9 J m-3 s-1) reaches 1e16+ and swamps the composite
+    total (breaking the early-stopping monitor); the arcsinh form is O(1) like every other
+    term. ``absorption_from_rates_stopgrad`` should have its gradient detached by the caller.
     """
-    return _mse(absorption_head, absorption_from_rates_stopgrad).mean()
+    pred_t = torch.arcsinh(absorption_head / scale)
+    tgt_t = torch.arcsinh(absorption_from_rates_stopgrad / scale)
+    return _weighted_mean(_mse(pred_t, tgt_t), row_weights)
 
 
 def energy_direct_loss(
     absorption_head: torch.Tensor,
     absorption_target: torch.Tensor,
+    scale: torch.Tensor | float = 1.0,
+    row_weights: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Direct head-vs-target MSE: |Ŝ_E_head − S_E_target| in log-space."""
-    eps = 1.0
-    pred_log = torch.log(absorption_head.clamp(min=eps))
-    tgt_log = torch.log(absorption_target.clamp(min=eps))
-    return _mse(pred_log, tgt_log).mean()
+    """Direct head-vs-target term in arcsinh space (head is strictly positive)."""
+    pred_t = torch.arcsinh(absorption_head / scale)
+    tgt_t = torch.arcsinh(absorption_target / scale)
+    return _weighted_mean(_mse(pred_t, tgt_t), row_weights)
 
 
 def split_head_consistency(
@@ -313,6 +331,7 @@ def merged_composite(
     sigma_active: torch.Tensor,
     sigma_comp_all: torch.Tensor,
     active_col_idx: torch.Tensor,
+    energy_arcsinh_scale: torch.Tensor | float = 1.0,
     # loss weights
     rate_weight: float = 1.0,
     latent_source_weight: float = 1.0,
@@ -434,7 +453,7 @@ def merged_composite(
         total = total + latent_source_weight * lsl
         parts["latent_source"] = float(lsl.detach())
 
-    # -- 3–5. Energy terms ---------------------------------------------------------------
+    # -- 3–5. Energy terms (arcsinh space at the fixed physical scale; tail row-weighted) --
     if absorption_from_rates_fn is not None:
         # rate-derived absorption (differentiable wrt rates_pred)
         abs_from_rates = absorption_from_rates_fn(rates_pred, q)  # (batch,) or (batch,1)
@@ -442,7 +461,8 @@ def merged_composite(
 
         # 3. Rate-tied energy tie (F3)
         if energy_weight > 0.0:
-            etl = energy_rate_tied_loss(abs_from_rates, absorption_target)
+            etl = energy_rate_tied_loss(
+                abs_from_rates, absorption_target, energy_arcsinh_scale, row_weights)
             total = total + energy_weight * etl
             parts["energy_rate_tied"] = float(etl.detach())
 
@@ -451,13 +471,15 @@ def merged_composite(
 
             # 4. Distillation: head → stopgrad(rate-derived)
             if energy_distill_weight > 0.0:
-                edl = energy_distill_loss(abs_head, abs_from_rates.detach())
+                edl = energy_distill_loss(
+                    abs_head, abs_from_rates.detach(), energy_arcsinh_scale, row_weights)
                 total = total + energy_distill_weight * edl
                 parts["energy_distill"] = float(edl.detach())
 
             # 5. Direct head vs target (always runs when head is present)
             if energy_target_weight > 0.0:
-                etgt = energy_direct_loss(abs_head, absorption_target)
+                etgt = energy_direct_loss(
+                    abs_head, absorption_target, energy_arcsinh_scale, row_weights)
                 total = total + energy_target_weight * etgt
                 parts["energy_direct"] = float(etgt.detach())
 
@@ -466,7 +488,8 @@ def merged_composite(
         # head directly against the DB target so its parameters receive gradients.
         abs_head = absorption_head.squeeze(-1)
         if energy_target_weight > 0.0:
-            etgt = energy_direct_loss(abs_head, absorption_target)
+            etgt = energy_direct_loss(
+                abs_head, absorption_target, energy_arcsinh_scale, row_weights)
             total = total + energy_target_weight * etgt
             parts["energy_direct"] = float(etgt.detach())
 
