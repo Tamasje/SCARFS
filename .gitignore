@@ -32,3 +32,6 @@ __pycache__/
 runs/
 checkpoints/
 sanity_figures/
+
+# Exception: small committed test fixtures
+!tests/data/*.parquet
