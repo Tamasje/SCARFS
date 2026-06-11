@@ -242,6 +242,7 @@ def split_head_consistency(
     encoder_weight_full: torch.Tensor,
     active_col_idx: torch.Tensor,
     sigma_active: torch.Tensor,
+    arcsinh_scale: torch.Tensor | float = 1.0,
 ) -> torch.Tensor:
     """MSE penalty ensuring the latent-source head agrees with the physical-rate head.
 
@@ -280,7 +281,12 @@ def split_head_consistency(
     true_contrib = (dydt_dry_true[:, active_col_idx] / sigma_active.unsqueeze(0)) @ e_act.t()
     residual = (z_dot_true - true_contrib).detach()
     consistency_target = pred_contrib + residual                                         # (batch, k)
-    return _mse(z_t, consistency_target).mean()
+    # arcsinh space at the frozen latent scale: raw z-dot components reach ~1e8 (trace-species
+    # σ-amplification), so a raw-unit MSE here dominates the whole composite by ~10 orders of
+    # magnitude and hijacks every gradient (observed: this single term at 2.3e11).
+    pred_t = torch.arcsinh(z_t / arcsinh_scale)
+    tgt_t = torch.arcsinh(consistency_target / arcsinh_scale)
+    return _mse(pred_t, tgt_t).mean()
 
 
 def lagrangian_rollout_loss(
@@ -498,6 +504,7 @@ def merged_composite(
         cpen = split_head_consistency(
             latent_src, rates_pred, rho, dydt_dry_phys, z_dot_true,
             encoder_weight_full, active_col_idx, sigma_active,
+            arcsinh_scale=arcsinh_latent_scale,
         )
         total = total + consistency_weight * cpen
         parts["consistency"] = float(cpen.detach())
