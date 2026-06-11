@@ -56,6 +56,79 @@ class TorchSurrogate:
         is ``True``.
     """
 
+    @classmethod
+    def from_merged_bundle(
+        cls,
+        bundle_dir,
+        schema: Schema,
+        *,
+        device: str = "cpu",
+        conserve_atoms: bool = False,
+    ) -> "TorchSurrogate":
+        """Load a trained MERGED bundle directory into a ready surrogate.
+
+        This is the single canonical loader for the bundle contract written by
+        ``scarfs.training.train._save_artifacts_merged``: ``model.pt`` (MergedCoil state
+        dict incl. energy-calibration buffers), ``scalers.pkl`` (dict whose
+        ``legacy_scalers`` is the FeatureScalers actually used to build features —
+        standard/linear composition for the merged model), and ``spec.json``
+        (species lists + architecture echo under ``config_echo.model``).
+        """
+        import json
+        import pickle
+        from pathlib import Path
+
+        import torch
+
+        from .neuralcoil import MergedCoil
+        from .thermo import SpeciesThermo
+
+        bundle_dir = Path(bundle_dir)
+        spec_doc = json.loads((bundle_dir / "spec.json").read_text(encoding="utf-8"))
+        if spec_doc.get("kind") != "merged":
+            raise ValueError(
+                f"from_merged_bundle: bundle at {bundle_dir} has kind="
+                f"{spec_doc.get('kind')!r}, expected 'merged'."
+            )
+        with (bundle_dir / "scalers.pkl").open("rb") as fh:
+            scalers_doc = pickle.load(fh)
+        scalers = scalers_doc["legacy_scalers"] if isinstance(scalers_doc, dict) else scalers_doc
+
+        input_species = tuple(spec_doc["input"])
+        target_species = tuple(spec_doc["target"])
+        model_cfg = spec_doc.get("config_echo", {}).get("model", {})
+        model = MergedCoil(
+            n_dry=len(input_species),
+            n_energy_active=len(target_species),
+            latent_dim=int(model_cfg.get("latent_dim", 8)),
+            decoder_hidden=tuple(model_cfg.get("decoder_hidden", (128, 256))),
+            rate_hidden=tuple(model_cfg.get("rate_hidden", (128, 128))),
+            latent_source_hidden=tuple(model_cfg.get("latent_source_hidden", (128, 128))),
+            energy_hidden=tuple(model_cfg.get("energy_hidden", (64, 64))),
+            activation=model_cfg.get("activation", "silu"),
+            spectral_norm=bool(model_cfg.get("spectral_norm", False)),
+        )
+        state = torch.load(str(bundle_dir / "model.pt"), map_location=device, weights_only=True)
+        model.load_state_dict(state)
+        model.eval()
+
+        molar_mass = element_matrix = None
+        mech_yaml = spec_doc.get("mech_yaml")
+        if mech_yaml and Path(mech_yaml).exists():
+            thermo = SpeciesThermo.from_mechanism_yaml(mech_yaml, target_species)
+            molar_mass, element_matrix = thermo.molar_mass, thermo.element_matrix
+
+        return cls(
+            model=model,
+            scalers=scalers,
+            spec=FeatureSpec(input_species=input_species, target_species=target_species),
+            schema=schema,
+            device=device,
+            molar_mass=molar_mass,
+            conserve_atoms=conserve_atoms,
+            element_matrix=element_matrix,
+        )
+
     def __init__(
         self,
         model,

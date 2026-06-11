@@ -25,9 +25,17 @@ Coupling sanity checks (no Cantera required):
         check_scaler_roundtrip,
     )
 
+MergedCoil UDF code generator (kind="merged" bundles):
+
+    from scarfs.coupling import export_merged_udf, ExportResult, InletSpec
+
+    result = export_merged_udf(bundle_dir, out_dir, n_reference_states=6)
+
 The C UDF templates (``fluent_reduced_source.c``, ``fluent_neuralcoil_uds.c``) are
 deliverable **templates** that the user compiles on the HPC.  Ansys Fluent cannot be
 run in this repository.  See ``README.md`` for compilation and wiring instructions.
+For MergedCoil bundles, see ``codegen.py`` and the ``merged_coil_udf.*`` artefacts it
+generates.
 """
 
 from __future__ import annotations
@@ -49,9 +57,10 @@ from scarfs.coupling.sanity import (
     mass_fraction_closure,
     source_term_mass_balance,
 )
+from scarfs.coupling.codegen import ExportResult, InletSpec, export_merged_udf
 
 __all__ = [
-    # export
+    # export (legacy / reduced / neuralcoil paths)
     "ModelBundle",
     "export_bundle",
     "export_mlp_weights",
@@ -66,4 +75,8 @@ __all__ = [
     "source_term_mass_balance",
     "energy_consistency",
     "check_scaler_roundtrip",
+    # merged-coil code generator
+    "export_merged_udf",
+    "ExportResult",
+    "InletSpec",
 ]

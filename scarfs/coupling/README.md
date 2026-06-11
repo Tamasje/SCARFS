@@ -185,3 +185,53 @@ res, ok = check_scaler_roundtrip(scaler, x)  # max abs reconstruction error <= 1
 These detect the *stable-but-biased* failure mode documented in DIAGNOSIS.md:
 a coupling-interface mismatch (wrong units, mole vs mass fractions, scaler inversion)
 will produce large residuals here even when the CFD solver converges.
+
+---
+
+## MergedCoil UDF code generator (kind="merged" bundles)
+
+For bundles produced by the merged training path (`kind="merged"` in `spec.json`),
+use `scarfs.coupling.codegen.export_merged_udf` instead of the handwritten templates
+above.  It generates all artefacts from the bundle in one call:
+
+```python
+from scarfs.coupling.codegen import export_merged_udf, InletSpec
+
+result = export_merged_udf(
+    bundle_dir="runs/exp",          # directory with model.pt / scalers.pkl / spec.json
+    out_dir="hpc_export_merged/",
+    n_reference_states=6,           # C forward-test reference vectors
+    inlet=InletSpec(                # optional: custom inlet composition for folded-BC
+        composition={"C2H6": 0.7, "H2O": 0.3},
+        T=923.0, P=2.0e5,
+    ),
+)
+# result.artifacts keys: header, udf_source, tui_setup, forward_test,
+#                        inlet_bc_txt, inlet_bc_csv, consistency_report
+# result.consistency_max_rel_diff_sh   — numpy-mirror vs torch max rel diff on S_h
+# result.spectral_norm_detected        — True if bundle had spectral-norm parametrizations
+```
+
+Generated files:
+
+| File | Purpose |
+|---|---|
+| `merged_coil_udf.h` | All static const weight/bias arrays; `#define` macros |
+| `merged_coil_udf.c` | `DEFINE_ADJUST` (projection) + `DEFINE_SOURCE` (energy + UDS) |
+| `fluent_merged_setup.tui` | TUI helper: UDM allocation + hook wiring notes |
+| `merged_coil_forward_test.c` | Standalone compile-and-run parity test (no `udf.h`) |
+| `inlet_bc.txt` / `inlet_bc.csv` | Encoded inlet z values for Fluent initialisation |
+| `export_consistency_report.txt` | NumPy-mirror vs torch parity table |
+
+Compile the forward test locally to verify before HPC deployment:
+
+```bash
+cc -O0 -lm merged_coil_forward_test.c -o mc_fwd_test && ./mc_fwd_test
+```
+
+The C UDF hooks follow the MergedCoil transport contract:
+- k UDS scalars transport z = E·((Y_dry − μ)⊘σ).
+- `DEFINE_ADJUST mc_manifold_project`: per-iteration manifold projection with annealed URF.
+- `DEFINE_SOURCE mc_energy_source`: S_h = −absorption_head(z, q) [J/m³/s].
+- Energy clamp `MC_ENERGY_CLAMP` ≈ 1.3× train-max (safety only; not prediction-falsifying).
+- Telemetry UDMs: OOD flag, latent-clamp count, energy-clamp count, last S_h.

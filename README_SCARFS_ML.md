@@ -1,117 +1,132 @@
-# SCARFS ML surrogate — fix pipeline (Phase 2)
+# SCARFS ML surrogate — merged pipeline (branch `scarfs-merge`)
 
-This is the `scarfs-fix` branch deliverable for the Tier-3 diagnosis + fix of the ChemZIP-style
-source-term surrogate. **Read first:** [`DIAGNOSIS.md`](DIAGNOSIS.md) (ranked root causes),
-[`FIX_PROPOSAL.md`](FIX_PROPOSAL.md) (fixes F1–F5 tied to causes), [`BENCHMARK_PLAN.md`](BENCHMARK_PLAN.md)
-(ChemZIP-derived acceptance tolerances).
+One model merged from two ChemZIP-style source-term surrogates, with the energy-prediction
+deviation resolved by design. **Read first:** [`MERGE_DESIGN.md`](MERGE_DESIGN.md) (the approved
+merge + energy-fix design and acceptance criteria), then the Phase-1 docs
+[`DIAGNOSIS.md`](DIAGNOSIS.md) / [`FIX_PROPOSAL.md`](FIX_PROPOSAL.md) /
+[`BENCHMARK_PLAN.md`](BENCHMARK_PLAN.md) (still valid for the parent design).
 
-Headline: the failure was **not** a missing residence-time feature (both ChemZIP and the thesis
-models are *source-term* surrogates — the CFD solver integrates). The fixes target the real causes:
-near-inlet coverage (RC-1), NeuralCoil latent drift (RC-2), energy/atom consistency (RC-3), and
-domain shift / OOD (RC-4).
+Headline: the energy deviation was **not** an enthalpy-basis or unit problem (audits pass at
+relRMSE ≈ 3e-5). It came from tail-suppressing training, a rank-k decode bottleneck, species-drop
+hidden-state loss, and front under-resolution — all removed in the merged model (split heads,
+full-composition standardized encoder, rate-tied energy, tail-faithful losses, front-adaptive data).
 
 ## Package layout
 
 ```
 scarfs/
-  schema.py            # canonical column contract for the CRACKSIM/PFR database
-  data/                # F1/F4: broadened + near-inlet/high-T enriched case sampling
-  models/              # scalers + contract (common), features, physics, nets, reduced, neuralcoil, adapter
-  training/            # config, datamodule (F1 weighting), losses (F2/F3), train (entry point)
-  benchmark/           # a-priori harness, metrics, baselines, yields, (a-posteriori comparison)
-  coupling/            # Fluent UDF/UDS templates + weight export + sanity checks
-  plotting/            # user palette, dual °C/K, 400-DPI figures
-configs/               # train_reduced.json, train_neuralcoil.json
-scripts/               # generate_database.py, local_sanity_check.py
-tests/                 # pytest suite (numpy core fully tested locally)
+  schema.py            # column contract: CSV + parquet (dYdt/wdot families, pseudo-species guard,
+                       #   `Reaction heat absorption` = the ONLY energy target)
+  data/                # broadened + enriched case sampling, front-adaptive storage, D-sweep, sign audit
+  models/              # scalers (incl. standard/linear composition), thermo (cantera-free NASA7),
+                       #   features, physics (+ exact atom projection), nets, reduced, neuralcoil
+                       #   (+ split-head MergedCoil), adapter (TorchSurrogate.from_merged_bundle)
+  training/            # config, datamodule (case GroupKFold, tail strata, enthalpy weights),
+                       #   losses (merged composite incl. rate-tied energy + Lagrangian rollout), train
+  benchmark/           # apriori (ChemZIP floor) + energy (§5 acceptance suite) + parents (beats-both
+                       #   protocol) + feasibility (kNN pre-gate) + ablation (k sweep) + baselines
+  diagnostics/         # energy unit/coverage audits, state-ambiguity, conservation, sanity,
+                       #   front-resolution — markdown+CSV reports
+  coupling/            # legacy templates + codegen.py: full merged-UDF C generation (UDS latent
+                       #   transport, rate-tied energy head, property hooks, OOD clamps + telemetry,
+                       #   TUI, folded BCs, compiled standalone forward test, consistency report)
+  plotting/            # palette, dual °C+K, 400-DPI figures (+ energy parity/tail/front/k figures)
+configs/               # train_merged.json (k=8 exceed), train_merged_mimic.json (parent-2 baseline),
+                       #   legacy reduced/neuralcoil configs
+scripts/               # generate_database.py, local_sanity_check.py (legacy + merged end-to-end),
+                       #   verify_feasibility_stride5.py, benchmark_parents.py
+tests/                 # pytest suite (456 tests; incl. real-data fixture tests/data/stride6_sample.parquet)
+chem_ForTransport.yaml # mechanism thermo source (NASA7) — validated vs DB absorption at relRMSE 2.9e-5
 ```
 
 ## Environments
 
 | Task | Where | Needs |
 |---|---|---|
-| Tests, a-priori harness, plotting, sanity | local or HPC | numpy, pandas, matplotlib (+ scipy/pyarrow optional) |
+| Tests, sanity, audits, feasibility, UDF codegen + C forward test | local or HPC | `.venv` (numpy, pandas, pyarrow, scipy, sklearn, matplotlib, torch CPU, pytest; `cc` for the C check) |
 | Database generation (CRACKSIM) | HPC | cantera + `SA_CRACKSIM.dll` + `chem.inp`/`transport_chemkin.dat` |
-| Training (both surrogates) | HPC | torch |
-| A-posteriori CFD | HPC | Ansys Fluent (compile the UDF templates) |
+| Full training + k ablation | HPC (GPU optional) | torch |
+| A-posteriori CFD | HPC | Ansys Fluent (compile the generated UDF) |
 
-`pip install -r requirements.txt` for the full set. The local box here runs only the core (no torch
-/ cantera), which is why training + CFD are HPC steps.
+Local setup: `uv venv .venv --python 3.12 && uv pip install -p .venv/bin/python numpy pandas
+matplotlib scipy pyarrow torch pyyaml pytest scikit-learn`.
 
 ## 1. Verify locally
 
 ```bash
-python -m pytest -q                 # 166 pass, 3 skip (parquet/cantera env-gated)
-python scripts/local_sanity_check.py   # data -> features -> benchmark -> figures, on real data
+.venv/bin/python -m pytest -q                  # 456 passed, 1 skipped (cantera-gated)
+.venv/bin/python scripts/local_sanity_check.py # legacy path + MERGED path end-to-end:
+                                               #   tiny train -> §5 energy gates -> audits ->
+                                               #   UDF codegen + compiled forward test -> figures
 ```
 
-## 2. Regenerate the database (HPC) — fixes F1/F4
+The merged sanity trains on the in-repo stride6 fixture by default; point `--merged-db` at a
+stride5 slice for a stronger check. A toy model FAILS the §5 gates by design — the point is that
+the machinery runs and gates honestly.
+
+## 2. Bootstrap data now, regenerate for certification (HPC)
+
+- **Bootstrap (now)**: train/benchmark on the colleague's `TEST_ETHANE_LOW_sobol_stride5.parquet`
+  (102,833 rows) with case-ID GroupKFold splits. Results are labeled *bootstrap, non-certifying*
+  (front under-resolved; see `scarfs/diagnostics/front_resolution.py`).
+- **Regenerate (HPC)**: `scripts/generate_database.py` with the merged generator — front-adaptive
+  storage (`storage.mode="front_adaptive"`), D-sweep incl. 0.0306 m, tail enrichment, all-species
+  `Y_*`/`dYdt_*` + `Reaction heat absorption` + tau/z, generator sign-audit. Regenerate a
+  front-adaptive **test** DB too — §5 certification runs only on that.
+
+## 3. Pre-gate k, then train (HPC)
 
 ```bash
-# coverage check anywhere (NumPy only):
-python scripts/generate_database.py --no-flow
-# finalise inlet flow with Cantera, then feed the manifest to the CRACKSIM harness:
-python scripts/generate_database.py --mech chem.yaml --out case_manifest.json
+# kNN feasibility pre-gate (also re-verifies the Phase-1 numbers on re-split stride5):
+.venv/bin/python scripts/verify_feasibility_stride5.py --database <stride5> --columns-projection --out feas.md
+# train the merged model / the parent-2 mimic baseline:
+python -m scarfs.training.train --config configs/train_merged.json
+python -m scarfs.training.train --config configs/train_merged_mimic.json
+# k ablation (energy/tail-metric selection, plan §4 E-e):
+python -c "from scarfs.benchmark.ablation import run_k_ablation; ..."   # ks=[4,6,8,12,16]
 ```
 
-The manifest (`scarfs.data.build_cases`) replaces the leftover narrow 18-case config in
-`Database_Generation_MB.py` with ~2160 quasi-random cases plus **near-inlet/low-conversion** and
-**high-T near-wall** enrichment. Plug the cases into the existing multiprocessing harness (its
-`run_case` consumes the same dict schema) to produce `Database_FINAL.parquet`.
-Tune ranges/enrichment in `scarfs/data/config.py` (`DataGenConfig`).
+Outputs per run: `model.pt`, `scalers.pkl`, `spec.json` (incl. energy calibration + export safety
+stats), `metrics.json` (incl. val absorption metrics for BOTH energy paths). No winsorization, no
+output bounds anywhere in the energy path; tail-stratified + enthalpy-aware weighting are on by
+config.
 
-## 3. Train (HPC) — fixes F2/F3
+## 4. Benchmark — must beat BOTH parents
 
 ```bash
-python -m scarfs.training.train --config configs/train_reduced.json
-python -m scarfs.training.train --config configs/train_neuralcoil.json
+.venv/bin/python scripts/benchmark_parents.py --database <db> \
+    --colleague-outputs /path/to/reduced_chem_ml/outputs \
+    --merged-bundle runs/merged --mimic-bundle runs/mimic
 ```
 
-Outputs under `output_dir`: `model.pt`, `scalers.pkl`, `spec.json`, `metrics.json`. The datamodule
-up-weights near-inlet states (F1, `inlet_weight`) and the key products (`species_weights`). The
-reduced model derives the energy source from predicted rates (F3, no free head); NeuralCoil uses a
-latent-space rate net + manifold-consistency + noise injection (F2).
+Identical case splits + identical metrics: ChemZIP floor (R²>95% all QoI, rel-err <10%, beats
+frozen/NN/mean baselines — `scarfs/benchmark/apriori.py`) **and** the §5 energy suite
+(`scarfs/benchmark/energy.py`: per-case tail gates, front localization, ∫S_E dτ budget; absolute
+floors reported, never gated). Run the diagnostics audits alongside
+(`scarfs.diagnostics.run_energy_unit_audit` / `run_energy_coverage_audit` / `run_ambiguity_collapse`).
 
-## 4. A-priori benchmark (offline)
+## 5. Fluent UDF (HPC)
 
 ```python
-from scarfs.benchmark.loader import load_database, infer_schema
-from scarfs.benchmark.apriori import AprioriConfig, holdout_split, run_apriori
-from scarfs.models.adapter import TorchSurrogate   # wraps a trained model as a Surrogate
-# build TorchSurrogate(model, scalers, spec, schema); then:
-report = run_apriori(surrogate, train_df, test_df, schema, AprioriConfig())
-print(report.summary())     # PASS requires R2>0.95 all QoI, median rel-err<10%, beats baselines
+from scarfs.coupling.codegen import export_merged_udf
+export_merged_udf("runs/merged", "udf_out")   # merged_coil_udf.c/.h + TUI + folded BCs +
+                                              # forward test + export-consistency report
 ```
 
-Targets (verbatim ChemZIP): R² > 95 % on all QoI; relative-error histograms centered < 10 %.
+Compile `merged_coil_udf.c` in Fluent; hook the k UDS sources, the adjust (manifold projection +
+species reconstruction), and the energy source (S_h = −absorption head; clamp = 1.3× max train
+absorption; under-relaxation ANNEALS to 1.0; clamp/OOD telemetry in UDMs). Run the standalone
+forward test on the HPC login node first (`cc merged_coil_forward_test.c -lm && ./a.out`).
+A-posteriori pass: outlet T ±10 K, major yields within 10% vs the detailed-chemistry reference,
+stable convergence, telemetry showing clamps inactive in-envelope.
 
-## 5. A-posteriori benchmark (coupled CFD, HPC)
+## Known limitations
 
-```python
-from scarfs.coupling.export import export_bundle   # serialise weights+scalers to text the UDF reads
-```
-
-1. Export the trained model bundle. 2. Compile `scarfs/coupling/fluent_reduced_source.c` (reduced) or
-`fluent_neuralcoil_uds.c` (NeuralCoil, with the **latent-manifold projection** that fixes RC-2) in
-Fluent. 3. Run vs your reference (detailed-chem CRACKSIM-in-Fluent / 1-D PFR / experiment — pluggable).
-Pass = yields & T within 10 % of reference **and** stable convergence (no freeze, no blow-up). See
-`scarfs/coupling/README.md`.
-
-## Fix → cause map
-
-| Fix | Cause | Where |
-|---|---|---|
-| F1 near-inlet enrichment + weighting | RC-1 | `data/`, `training/datamodule.py` |
-| F2 latent-Z rate net + manifold projection + noise | RC-2 | `models/neuralcoil.py`, `training/losses.py`, UDS template |
-| F3 energy-from-rates + atom-balance penalty | RC-3 | `models/physics.py`, `training/losses.py` |
-| F4 broad envelope + OOD input clipping | RC-4 | `data/config.py`, coupling templates |
-| F5 `customPFR` velocity `/A` | flagged bug | `ideal_reactor_models.py` |
-
-(Also fixed: `np.infty` → `np.inf` in `ideal_reactor_models.py` for NumPy ≥ 2 import compatibility.)
-
-## Known gaps vs ChemZIP tolerances
-- Accuracy numbers require the HPC training run; not yet measured (no local torch/data).
-- Atom balance on the reduced active set is a soft pressure, not exact closure (needs full species).
-- The exact 30-species active set is configurable; defaults to the molecular set — set explicitly to
-  match the thesis if required.
-- A-posteriori reference is pluggable and **awaiting your reference data**.
+- Accuracy numbers require the full HPC training run (local runs are pipeline proofs).
+- 20 of 213 species lack thermo blocks in `chem_ForTransport.yaml` (cannot be energy-active;
+  their direct enthalpy-flux share was measured negligible — see `metrics.json`
+  `thermo_missing_species`).
+- Transport properties in the UDF use decoded-composition NASA cp but database-median fallbacks
+  for μ/k (tracked gap, inherited from the colleague's design).
+- stride6 is a *different campaign* than stride5 (disjoint envelope corners) — use it only as a
+  distribution-shift diagnostic, never as held-out-of-stride5.

@@ -440,7 +440,7 @@ def prepare_data(
     schema: Schema,
     *,
     composition_kwargs: dict | None = None,
-    prefer_dydt: bool = False,
+    prefer_dydt: bool | None = None,
 ) -> DataBundle:
     """Build a :class:`DataBundle` from a loaded DataFrame and its schema.
 
@@ -452,9 +452,13 @@ def prepare_data(
 
     ``composition_kwargs`` overrides the :class:`CompositionScaler` construction entirely (the
     merged model passes ``{"log": False, "mode": "standard"}`` so X is built with the SAME scaler
-    that is exported — never fit one scaler and ship another).  ``prefer_dydt=True`` makes targets
-    mass rates ``ρ·dY/dt`` on dYdt-carrying databases (see ``features.fit_scalers``).
+    that is exported — never fit one scaler and ship another).  ``prefer_dydt`` selects the rate
+    family for targets: ``None`` (default) auto-detects — mass rates ``ρ·dY/dt`` whenever the
+    schema carries dYdt columns (on those databases the ``R_`` columns are raw kmol m-3 s-1 and
+    must not feed the mass-rate contract), legacy ``R_`` otherwise.
     """
+    if prefer_dydt is None:
+        prefer_dydt = hasattr(schema, "has_dydt") and schema.has_dydt()
     input_species = resolve_species(schema, cfg.input_species)
     # "energy_active" deferred to train.py; use "active" fallback here
     target_sel = cfg.target_species

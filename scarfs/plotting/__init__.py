@@ -22,6 +22,14 @@ relative_error_histogram
     Histogram of relative errors with median marker and ±10 % reference.
 axial_profiles
     Overlay axial profiles (predicted vs reference) along the reactor axis.
+energy_parity_figure
+    Log-log parity plot for energy absorption with ±10 % / ±25 % bands.
+tail_rel_err_hist_figure
+    Tail relative-error histogram with 10 % target line.
+front_localization_figure
+    Per-case S_E vs τ profile with CDF inset.
+accuracy_vs_k_figure
+    Metric vs latent dimension k for the ablation study.
 """
 
 from .plot_defaults import (
@@ -31,12 +39,16 @@ from .plot_defaults import (
     palette,
 )
 from .figures import (
+    accuracy_vs_k_figure,
     axial_profiles,
+    energy_parity_figure,
     error_vs_conversion,
     error_vs_residence_time,
     error_vs_temperature,
+    front_localization_figure,
     parity_plot,
     relative_error_histogram,
+    tail_rel_err_hist_figure,
 )
 
 __all__ = [
@@ -50,4 +62,8 @@ __all__ = [
     "error_vs_conversion",
     "relative_error_histogram",
     "axial_profiles",
+    "energy_parity_figure",
+    "tail_rel_err_hist_figure",
+    "front_localization_figure",
+    "accuracy_vs_k_figure",
 ]

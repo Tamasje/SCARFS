@@ -9,6 +9,9 @@ This package supports the Tier-3 fix of the ChemZIP-style surrogate replication:
 - ``scarfs.benchmark``    — a-priori (offline) and a-posteriori (CFD) benchmark harness.
 - ``scarfs.coupling``     — Fluent UDF/UDS coupling scaffolding.
 - ``scarfs.plotting``     — publication figures (user palette, dual °C/K, 400 DPI).
+- ``scarfs.diagnostics``  — standing audit writers (energy unit/coverage, ambiguity,
+                            conservation, sanity, front-resolution) with recalibrated
+                            thresholds; grafted from the colleague's audit machinery (B2c).
 
 Diagnosis and rationale: see ``DIAGNOSIS.md``, ``FIX_PROPOSAL.md``, ``BENCHMARK_PLAN.md``.
 """
