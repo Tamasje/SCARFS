@@ -782,11 +782,17 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
             model.encode(_torch.as_tensor(X_comp_train, dtype=_torch.float32, device=device))
             .cpu().numpy()
         )
+    (t_col_x,) = schema.require_state("T")
+    (p_col_x,) = schema.require_state("P")
     export_stats = {
         "latent_env_min": z_train.min(axis=0).tolist(),
         "latent_env_max": z_train.max(axis=0).tolist(),
         "absorption_train_max": float(absorption_train.max()),
         "energy_clamp": float(1.3 * absorption_train.max()),
+        "T_train_min": float(df_train[t_col_x].min()),
+        "T_train_max": float(df_train[t_col_x].max()),
+        "P_train_min": float(df_train[p_col_x].min()),
+        "P_train_max": float(df_train[p_col_x].max()),
     }
     _save_artifacts_merged(cfg, model, bundle, metrics, energy_active,
                            linear_comp_scaler, rate_scaler, arcsinh_latent_scale,
