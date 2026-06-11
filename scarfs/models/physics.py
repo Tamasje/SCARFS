@@ -80,6 +80,57 @@ def atom_balance_residual(
     return r @ np.asarray(element_matrix, dtype=float)
 
 
+def project_conserve_atoms(
+    rate_mass: np.ndarray,
+    molar_mass: np.ndarray,
+    element_matrix: np.ndarray,
+) -> np.ndarray:
+    """Project mass production rates onto the atom-conserving null-space.
+
+    Applies the minimal L2 correction to the molar rates so that their
+    element-balance residual ``A^T · r`` is zero, then converts back to mass
+    rates.  The correction is:
+
+        r_corr = r − A · (A^T A)^{-1} · A^T · r
+
+    where ``A = element_matrix`` (atoms per molecule), ``r = rate_mass / W``
+    (molar rates).  ``(A^T A)^{-1}`` is computed via :func:`numpy.linalg.lstsq`
+    for numerical safety when the element set is rank-deficient (e.g. a
+    truncated species subset).
+
+    This projection is exact (residual at machine-eps) when the species set
+    spans all atom carriers; for a reduced active subset it provides a
+    consistency pressure while minimising the L2 perturbation to the rates.
+    The projection is idempotent by construction.
+
+    Parameters
+    ----------
+    rate_mass
+        ``(n, n_species)`` mass production rates [kg m-3 s-1].
+    molar_mass
+        ``(n_species,)`` molar masses [kg kmol-1].
+    element_matrix
+        ``(n_species, n_elements)`` atoms of each element per molecule.
+
+    Returns
+    -------
+    ``(n, n_species)`` corrected mass production rates [kg m-3 s-1].
+    """
+    rate_mass = np.asarray(rate_mass, dtype=float)
+    W = np.asarray(molar_mass, dtype=float)
+    A = np.asarray(element_matrix, dtype=float)       # (n_species, n_elements)
+
+    r = rate_mass / W[None, :]                        # (n, n_species) molar rates
+    # Solve the normal equations for the correction coefficient:
+    # δ = (A^T A)^{-1} A^T r^T  →  shape (n_elements, n)
+    AtA = A.T @ A                                     # (n_elements, n_elements)
+    Atr = r @ A                                       # (n, n_elements)  = (A^T r^T)^T
+    # pseudo-inverse via lstsq (handles rank-deficiency)
+    coeff, _, _, _ = np.linalg.lstsq(AtA, Atr.T, rcond=None)  # (n_elements, n)
+    r_corr = r - (A @ coeff).T                        # (n, n_species)
+    return r_corr * W[None, :]
+
+
 def element_data_from_cantera(mech_path: str, species: list[str]):
     """Return ``(molar_mass, element_matrix, element_names)`` for *species* (Cantera, HPC only).
 

@@ -167,3 +167,42 @@ class TestInferSchema:
         schema = infer_schema(df_loaded)
 
         assert schema.species == ("A", "B")
+
+
+# ---------------------------------------------------------------------------
+# columns= projection (new feature)
+# ---------------------------------------------------------------------------
+
+class TestLoadDatabaseProjection:
+    def test_csv_projection_returns_subset(self, tmp_path: Path) -> None:
+        """Arrange: write CSV with 9 columns. Act: load with columns= subset. Assert: only subset present."""
+        df = _minimal_df()
+        path = tmp_path / "test.csv"
+        df.to_csv(path, index=False)
+
+        df_loaded = load_database(path, columns=["Y_A", "T [K]"])
+
+        assert list(df_loaded.columns) == ["Y_A", "T [K]"]
+        assert len(df_loaded) == len(df)
+
+    @requires_parquet
+    def test_parquet_projection_returns_subset(self, tmp_path: Path) -> None:
+        """Arrange: write Parquet. Act: load with columns= subset. Assert: only subset loaded."""
+        df = _minimal_df()
+        path = tmp_path / "test.parquet"
+        df.to_parquet(path, index=False)
+
+        df_loaded = load_database(path, columns=["Y_B", "P [Pa]"])
+
+        assert list(df_loaded.columns) == ["Y_B", "P [Pa]"]
+        assert len(df_loaded) == len(df)
+
+    def test_columns_none_loads_all(self, tmp_path: Path) -> None:
+        """Arrange: CSV. Act: load without columns= (None default). Assert: all columns loaded."""
+        df = _minimal_df()
+        path = tmp_path / "test.csv"
+        df.to_csv(path, index=False)
+
+        df_loaded = load_database(path, columns=None)
+
+        assert list(df_loaded.columns) == list(df.columns)

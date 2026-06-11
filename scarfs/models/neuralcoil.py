@@ -1,4 +1,5 @@
-"""NeuralCoil latent-space surrogate (thesis Ch. 5) with the RC-2 stability fixes (F2).
+"""NeuralCoil latent-space surrogate (thesis Ch. 5) with the RC-2 stability fixes (F2),
+and ``MergedCoil`` — the split-head merged surrogate (plan §3 / §4 E-b).
 
 Architecture (ChemZIP-faithful, with two deliberate corrections of the thesis deviations that caused
 the divergence in DIAGNOSIS.md RC-2):
@@ -14,10 +15,20 @@ the divergence in DIAGNOSIS.md RC-2):
   fix for RC-2; mirrored in the Fluent UDS template).
 
 ``q`` is the standardised thermo block ``[T, p, 1/T, ln T]``.
+
+``MergedCoil`` extends the design with:
+
+- Per-species standardised encoder input (linear, log=False, mode="standard") to preserve
+  trace-species information (energy fix E-a).
+- Three heads computed on ``cat([z_proj, q])``:
+  1. Latent source ``ω_Z`` for CFD transport.
+  2. Physical-rate head restricted to the energy-active species subset.
+  3. Distilled strictly-positive absorption head (softplus-scaled).
 """
 
 from __future__ import annotations
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -98,3 +109,216 @@ class NeuralCoil(nn.Module):
         z_proj = self.encoder(y_recon)
         rates = self.rates_from_latent(z_proj, q)
         return {"z": z, "z_proj": z_proj, "y_recon": y_recon, "rates": rates}
+
+
+class MergedCoil(nn.Module):
+    """Split-head merged latent-space surrogate (plan §3 / §4 E-a – E-e).
+
+    Extends :class:`NeuralCoil` with:
+
+    - Per-species **standardised** (linear, no log) encoder input — preserves
+      trace-species energy information (E-a).
+    - Decoder outputs in **standardised** space (no sigmoid — the composition
+      is no longer min–max scaled) with final activation = None.
+    - **Three heads** on ``cat([z_proj, q])``:
+
+      1. ``latent_source_net``: ``(B, k)`` scaled ω_Z for CFD transport
+         (dimensionless; the CFD solver forms the actual source term).
+      2. ``rate_net``: ``(B, n_energy_active)`` scaled physical rates for the
+         energy-active species subset; this head drives the energy computation.
+      3. ``energy_net_raw``: ``(B, 1)`` un-activated output mapped through
+         softplus + calibration to give a strictly-positive absorption.
+
+    Absorption = softplus(energy_raw) · energy_scale + energy_floor.
+
+    Parameters
+    ----------
+    n_dry
+        Number of (dry, diluent-excluded) species — the encoder input width.
+    n_energy_active
+        Number of energy-active species — the physical-rate head output width.
+    latent_dim
+        Latent dimension ``k`` (default 8, per plan E-e ablation default).
+    n_thermo
+        Width of the thermo block (default 4: ``[T, p, 1/T, ln T]``).
+    decoder_hidden, rate_hidden, latent_source_hidden, energy_hidden
+        Hidden layer widths for the respective MLPs.
+    activation
+        Hidden activation name.
+    spectral_norm
+        If ``True``, apply spectral normalisation to head Linear layers.
+    """
+
+    def __init__(
+        self,
+        n_dry: int,
+        n_energy_active: int,
+        latent_dim: int = 8,
+        n_thermo: int = 4,
+        decoder_hidden: tuple[int, ...] = (128, 256),
+        rate_hidden: tuple[int, ...] = (128, 128),
+        latent_source_hidden: tuple[int, ...] = (128, 128),
+        energy_hidden: tuple[int, ...] = (64, 64),
+        activation: str = "silu",
+        spectral_norm: bool = False,
+    ) -> None:
+        super().__init__()
+        self.n_dry = n_dry
+        self.n_energy_active = n_energy_active
+        self.latent_dim = latent_dim
+
+        k = latent_dim
+        self.encoder = nn.Linear(n_dry, k, bias=False)
+        # Decoder: standardised-space output (no sigmoid — caller handles composition contract)
+        self.decoder = make_mlp(
+            [k + n_thermo, *decoder_hidden, n_dry],
+            activation=activation,
+            layernorm=False,
+            final_activation=None,
+        )
+        # Head 1: latent source ω_Z
+        self.latent_source_net = make_mlp(
+            [k + n_thermo, *latent_source_hidden, k],
+            activation=activation,
+            layernorm=True,
+            final_activation=None,
+            spectral_norm=spectral_norm,
+        )
+        # Head 2: physical rates for energy-active species
+        self.rate_net = make_mlp(
+            [k + n_thermo, *rate_hidden, n_energy_active],
+            activation=activation,
+            layernorm=True,
+            final_activation=None,
+            spectral_norm=spectral_norm,
+        )
+        # Head 3: distilled absorption (strictly positive via softplus)
+        self.energy_net = make_mlp(
+            [k + n_thermo, *energy_hidden, 1],
+            activation=activation,
+            layernorm=False,
+            final_activation=None,
+            spectral_norm=spectral_norm,
+        )
+        # Calibration buffers (set by set_energy_calibration after seeing training data)
+        self.register_buffer("energy_scale", torch.tensor(1.0))
+        self.register_buffer("energy_floor", torch.tensor(0.0))
+
+    # ------------------------------------------------------------------
+    # Encoder / decoder / projection
+    # ------------------------------------------------------------------
+    def encode(self, y_std: torch.Tensor) -> torch.Tensor:
+        """Map per-species standardised composition to the latent space."""
+        return self.encoder(y_std)
+
+    def decode(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+        """Reconstruct standardised composition from latent + thermo."""
+        return self.decoder(torch.cat([z, q], dim=-1))
+
+    def project(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+        """Snap a (possibly drifted) latent onto the encoder manifold: Z ← E·D(Z).
+
+        Identical in purpose to the :class:`NeuralCoil` manifold projection (F2 fix
+        for RC-2) but operates in the standardised-composition space.
+        """
+        return self.encoder(self.decode(z, q))
+
+    # ------------------------------------------------------------------
+    # Heads (take z_proj not raw z, for stability)
+    # ------------------------------------------------------------------
+    def latent_source(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+        """Scaled latent-source ω_Z (shape ``(B, k)``) for CFD transport."""
+        return self.latent_source_net(torch.cat([z, q], dim=-1))
+
+    def rates_from_latent(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+        """Scaled physical production rates for energy-active species (``(B, n_energy_active)``)."""
+        return self.rate_net(torch.cat([z, q], dim=-1))
+
+    def _energy_raw(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+        return self.energy_net(torch.cat([z, q], dim=-1)).squeeze(-1)  # (B,)
+
+    def absorption(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+        """Strictly-positive absorption [J/m³/s] via softplus + calibration.
+
+        absorption = softplus(energy_raw) * energy_scale + energy_floor
+
+        ``energy_scale`` and ``energy_floor`` are registered buffers initialised
+        to 1.0 / 0.0 and set to representative training-data statistics via
+        :meth:`set_energy_calibration`.
+        """
+        raw = self._energy_raw(z, q)
+        return torch.nn.functional.softplus(raw) * self.energy_scale + self.energy_floor
+
+    # ------------------------------------------------------------------
+    # Calibration
+    # ------------------------------------------------------------------
+    def set_energy_calibration(self, scale: float, floor: float = 0.0) -> None:
+        """Set the energy head calibration buffers.
+
+        Parameters
+        ----------
+        scale
+            Typical absorption magnitude (e.g. median of training absorption
+            column); makes the softplus output numerically comparable to the
+            target distribution before training.
+        floor
+            Minimum guaranteed output [J/m³/s] (default 0.0).
+        """
+        self.energy_scale.fill_(float(scale))
+        self.energy_floor.fill_(float(floor))
+
+    # ------------------------------------------------------------------
+    # PCA initialisation helper
+    # ------------------------------------------------------------------
+    def init_encoder_pca(self, components: np.ndarray) -> None:
+        """Initialise the encoder weight from PCA components.
+
+        Parameters
+        ----------
+        components
+            ``(k, n_dry)`` array of the top-k PCA components (rows = components,
+            as returned by ``sklearn.decomposition.PCA.components_``).
+        """
+        w = torch.as_tensor(components, dtype=torch.float32)
+        if w.shape != (self.latent_dim, self.n_dry):
+            raise ValueError(
+                f"init_encoder_pca: expected ({self.latent_dim}, {self.n_dry}), got {tuple(w.shape)}"
+            )
+        with torch.no_grad():
+            self.encoder.weight.copy_(w)
+
+    # ------------------------------------------------------------------
+    # Forward
+    # ------------------------------------------------------------------
+    def forward(
+        self, y_std: torch.Tensor, q: torch.Tensor
+    ) -> dict[str, torch.Tensor]:
+        """Full forward pass.
+
+        Returns
+        -------
+        dict with keys:
+        - ``z``: raw latent ``(B, k)``.
+        - ``z_proj``: manifold-projected latent ``(B, k)``.
+        - ``y_recon``: reconstructed standardised composition ``(B, n_dry)``.
+        - ``latent_source``: ω_Z head output ``(B, k)``.
+        - ``rates``: physical-rate head output ``(B, n_energy_active)``.
+        - ``absorption``: strictly-positive absorption head ``(B,)``.
+        """
+        z = self.encode(y_std)
+        y_recon = self.decode(z, q)
+        z_proj = self.encoder(y_recon)
+        zq = torch.cat([z_proj, q], dim=-1)  # shared input for all heads
+        # compute heads from z_proj (stability: manifold-consistent state)
+        ls = self.latent_source_net(zq)
+        rates = self.rate_net(zq)
+        raw = self.energy_net(zq).squeeze(-1)
+        abs_ = torch.nn.functional.softplus(raw) * self.energy_scale + self.energy_floor
+        return {
+            "z": z,
+            "z_proj": z_proj,
+            "y_recon": y_recon,
+            "latent_source": ls,
+            "rates": rates,
+            "absorption": abs_,
+        }

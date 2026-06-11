@@ -38,15 +38,42 @@ class CompositionScaler:
     floor
         Lower clip applied to mass fractions prior to the log.
     feature_range
-        Target range of the affine map (default ``(-1.0, 1.0)``).
+        Target range of the affine map (default ``(-1.0, 1.0)``).  Ignored when
+        ``mode="standard"``.
+    mode
+        Scaling mode applied after the optional log transform:
+
+        - ``"minmax"`` (default): per-species affine map to *feature_range*.
+        - ``"standard"``: per-species z-score (zero mean, unit variance).  Use
+          with ``log=False`` for the merged model's standardised linear
+          encoder contract (plan §3 / E-a).  ``mean_`` and ``scale_`` are
+          accessible for the UDF exporter.
+
+    Attributes
+    ----------
+    data_min_, data_max_
+        Set by ``fit()`` in minmax mode; ``None`` in standard mode.
+    mean_, scale_
+        Set by ``fit()`` in standard mode; ``None`` in minmax mode.
     """
 
-    def __init__(self, log: bool = True, floor: float = 1e-30, feature_range: tuple[float, float] = (-1.0, 1.0)):
+    def __init__(
+        self,
+        log: bool = True,
+        floor: float = 1e-30,
+        feature_range: tuple[float, float] = (-1.0, 1.0),
+        mode: str = "minmax",
+    ):
+        if mode not in ("minmax", "standard"):
+            raise ValueError(f"CompositionScaler mode must be 'minmax' or 'standard', got {mode!r}")
         self.log = log
         self.floor = float(floor)
         self.feature_range = (float(feature_range[0]), float(feature_range[1]))
+        self.mode = mode
         self.data_min_: np.ndarray | None = None
         self.data_max_: np.ndarray | None = None
+        self.mean_: np.ndarray | None = None
+        self.scale_: np.ndarray | None = None
 
     def _pre(self, y: np.ndarray) -> np.ndarray:
         y = np.asarray(y, dtype=float)
@@ -55,17 +82,27 @@ class CompositionScaler:
         return y
 
     def fit(self, y: np.ndarray) -> "CompositionScaler":
-        """Fit per-column min/max on the (log-)transformed composition."""
+        """Fit per-species statistics on the (log-)transformed composition."""
         t = self._pre(y)
-        self.data_min_ = t.min(axis=0)
-        self.data_max_ = t.max(axis=0)
+        if self.mode == "standard":
+            self.mean_ = t.mean(axis=0)
+            std = t.std(axis=0)
+            self.scale_ = np.where(std > 0, std, 1.0)
+        else:  # minmax
+            self.data_min_ = t.min(axis=0)
+            self.data_max_ = t.max(axis=0)
         return self
 
     def transform(self, y: np.ndarray) -> np.ndarray:
-        """Map composition to ``feature_range``."""
+        """Map composition to the fitted scale."""
+        t = self._pre(y)
+        if self.mode == "standard":
+            if self.mean_ is None:
+                raise RuntimeError("CompositionScaler.transform called before fit().")
+            return (t - self.mean_) / self.scale_
+        # minmax
         if self.data_min_ is None:
             raise RuntimeError("CompositionScaler.transform called before fit().")
-        t = self._pre(y)
         span = np.where(self.data_max_ > self.data_min_, self.data_max_ - self.data_min_, 1.0)
         unit = (t - self.data_min_) / span
         lo, hi = self.feature_range
@@ -75,12 +112,18 @@ class CompositionScaler:
         return self.fit(y).transform(y)
 
     def inverse_transform(self, s: np.ndarray) -> np.ndarray:
-        """Invert :meth:`transform` back to mass fractions."""
-        if self.data_min_ is None:
-            raise RuntimeError("CompositionScaler.inverse_transform called before fit().")
-        lo, hi = self.feature_range
-        span = np.where(self.data_max_ > self.data_min_, self.data_max_ - self.data_min_, 1.0)
-        t = (np.asarray(s, dtype=float) - lo) / (hi - lo) * span + self.data_min_
+        """Invert :meth:`transform` back to mass fractions (or log-transformed values)."""
+        s = np.asarray(s, dtype=float)
+        if self.mode == "standard":
+            if self.mean_ is None:
+                raise RuntimeError("CompositionScaler.inverse_transform called before fit().")
+            t = s * self.scale_ + self.mean_
+        else:
+            if self.data_min_ is None:
+                raise RuntimeError("CompositionScaler.inverse_transform called before fit().")
+            lo, hi = self.feature_range
+            span = np.where(self.data_max_ > self.data_min_, self.data_max_ - self.data_min_, 1.0)
+            t = (s - lo) / (hi - lo) * span + self.data_min_
         return np.power(10.0, t) if self.log else t
 
 

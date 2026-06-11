@@ -1,0 +1,423 @@
+species:
+- name: H2
+  composition:
+    H: 2
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 3.5370809
+      - -0.0003547348
+      - 6.8090191e-07
+      - -2.2708045e-10
+      - 1.9361594e-14
+      - -1044.3898
+      - -4.368296
+    - - 2.8074577
+      - 0.0010556683
+      - -2.7515471e-07
+      - 3.1376499e-11
+      - -1.3183317e-15
+      - -756.60482
+      - -0.33690075
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 59.7
+    diameter: 2.833
+    note: "Primary Transport Library: RMG-minimal (Species ID: H2)\t ! Value stored\
+      \ by RMG in Species.selectLJParametersForSpecialMolecule()"
+- name: CH4
+  composition:
+    C: 1
+    H: 4
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 2.9152131
+      - 0.0032379533
+      - 6.9122082e-06
+      - -5.8427379e-09
+      - 1.3320812e-12
+      - -10071.794
+      - 4.5571956
+    - - 2.7185041
+      - 0.0084695115
+      - -2.8617088e-06
+      - 4.4032851e-10
+      - -2.5377322e-14
+      - -10557.62
+      - 3.7932076
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 264.478
+    diameter: 4.226
+    rotational-relaxation: 1.0
+    note: "LJ parameters estimated by RMG: Tc= 339.041K Pc=  60.093bar Vc=  17.500cm3/mol\
+      \ Tb= 198.000K\tnull)"
+- name: C2H6
+  composition:
+    C: 2
+    H: 6
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - -0.025285436
+      - 0.024076475
+      - -1.1189347e-05
+      - 2.083409e-09
+      - -5.2986862e-14
+      - -11234.553
+      - 21.164875
+    - - 6.1068338
+      - 0.012923636
+      - -4.425272e-06
+      - 6.8739173e-10
+      - -3.9890173e-14
+      - -13750.001
+      - -13.008125
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 300.418
+    diameter: 4.786
+    rotational-relaxation: 1.0
+    note: "LJ parameters estimated by RMG: Tc= 401.627K Pc=  50.299bar Vc= 147.500cm3/mol\
+      \ Tb= 245.160K\t(CsH3R, CsH3R)"
+- name: C2H4
+  composition:
+    C: 2
+    H: 4
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 0.23387969
+      - 0.019633465
+      - -1.1683321e-05
+      - 3.6424645e-09
+      - -4.7744272e-13
+      - 5454.8279
+      - 19.708423
+    - - 5.2217637
+      - 0.008961373
+      - -3.0486889e-06
+      - 4.7146552e-10
+      - -2.7273959e-14
+      - 3593.8314
+      - -7.4778923
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 291.56
+    diameter: 4.65
+    rotational-relaxation: 1.0
+    note: "LJ parameters estimated by RMG: Tc= 387.181K Pc=  52.663bar Vc= 129.500cm3/mol\
+      \ Tb= 234.360K\t(CdH2R, CdH2R)"
+- name: C3H8
+  composition:
+    C: 3
+    H: 8
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - -0.29354676
+      - 0.036387025
+      - -1.9504962e-05
+      - 4.9590042e-09
+      - -4.5591979e-13
+      - -14114.888
+      - 24.108738
+    - - 9.3090362
+      - 0.01731994
+      - -5.9200631e-06
+      - 9.1854978e-10
+      - -5.3265009e-14
+      - -17851.112
+      - -28.764905
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 311.392
+    diameter: 5.134
+    rotational-relaxation: 1.0
+    note: "LJ parameters estimated by RMG: Tc= 427.337K Pc=  44.091bar Vc= 203.500cm3/mol\
+      \ Tb= 268.040K\t(CsH3R, CsH3R, CsH2R2)"
+- name: C3H6
+  composition:
+    C: 3
+    H: 6
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 0.39461544
+      - 0.028910766
+      - -1.5488681e-05
+      - 3.8881421e-09
+      - -3.3789035e-13
+      - 1066.8816
+      - 21.900374
+    - - 8.0159596
+      - 0.013702363
+      - -4.6624973e-06
+      - 7.212544e-10
+      - -4.1737013e-14
+      - -1878.2127
+      - -20.016067
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 315.442
+    diameter: 5.024
+    rotational-relaxation: 1.0
+    note: "LJ parameters estimated by RMG: Tc= 427.317K Pc=  46.657bar Vc= 184.500cm3/mol\
+      \ Tb= 264.720K\t(CdH2R, CsH3R, CdHR2)"
+- name: H2O
+  composition:
+    H: 2
+    O: 1
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 3.9981565
+      - -0.00056442678
+      - 2.6935286e-06
+      - -1.3882239e-09
+      - 2.2229946e-13
+      - -30277.201
+      - -0.021958403
+    - - 2.1266431
+      - 0.0039506441
+      - -1.3444592e-06
+      - 2.0223366e-10
+      - -1.1283218e-14
+      - -29664.842
+      - 9.9413095
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 809.1
+    diameter: 2.641
+    polarizability: 1.76
+    rotational-relaxation: 4.0
+    note: "Primary Transport Library: RMG-minimal (Species ID: H2O)\t ! Value stored\
+      \ by RMG in Species.selectLJParametersForSpecialMolecule()"
+- name: CO
+  composition:
+    C: 1
+    O: 1
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 3.82
+      - -0.00241
+      - 5.75e-06
+      - -4.29e-09
+      - 1.11e-12
+      - -14400.0
+      - 2.5
+    - - 2.69
+      - 0.00212
+      - -1.05e-06
+      - 2.46e-10
+      - -2.23e-14
+      - -14100.0
+      - 7.97
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 98.1
+    diameter: 3.65
+    polarizability: 1.95
+    rotational-relaxation: 1.8
+- name: CO2
+  composition:
+    C: 1
+    O: 2
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 2.45
+      - 0.00855
+      - -6.61e-06
+      - 2.53e-09
+      - -3.8e-13
+      - -48400.0
+      - 9.48
+    - - 5.08
+      - 0.00205
+      - -5.94e-07
+      - 5.39e-11
+      - 1.66e-15
+      - -49200.0
+      - -4.48
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 244.0
+    diameter: 3.763
+    polarizability: 2.65
+    rotational-relaxation: 2.1
+- name: H.
+  composition:
+    H: 1
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 2.5010442
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 25474.747
+      - -0.46534132
+    - - 2.5010442
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 25474.747
+      - -0.46534132
+  transport:
+    model: gas
+    geometry: atom
+    well-depth: 145.0
+    diameter: 2.05
+- name: CH3.
+  composition:
+    C: 1
+    H: 3
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 3.4385816
+      - 0.0040775267
+      - 3.1983096e-07
+      - -9.4766937e-10
+      - 2.2182816e-13
+      - 16316.402
+      - 2.5280741
+    - - 3.5128137
+      - 0.0051141262
+      - -1.6763205e-06
+      - 2.5249518e-10
+      - -1.4330293e-14
+      - 16123.803
+      - 1.6243613
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 262.581
+    diameter: 4.162
+    rotational-relaxation: 1.0
+    note: "LJ parameters estimated by RMG: Tc= 339.041K Pc=  63.189bar Vc=  17.500cm3/mol\
+      \ Tb= 198.000K\tnull)"
+- name: C2H3.
+  composition:
+    C: 2
+    H: 3
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 1.2532972
+      - 0.015625837
+      - -1.0780388e-05
+      - 4.1805463e-09
+      - -7.0136036e-13
+      - 35063.412
+      - 17.134166
+    - - 5.0733125
+      - 0.0065831628
+      - -2.2376292e-06
+      - 3.4580338e-10
+      - -1.9994049e-14
+      - 33713.409
+      - -3.3979271
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 289.369
+    diameter: 4.585
+    rotational-relaxation: 1.0
+    note: "LJ parameters estimated by RMG: Tc= 387.181K Pc=  55.196bar Vc= 129.500cm3/mol\
+      \ Tb= 234.360K\t(CdH2R, CdH2R)"
+- name: C2H5.
+  composition:
+    C: 2
+    H: 5
+  thermo:
+    model: NASA7
+    temperature-ranges:
+    - 300.0
+    - 1400.0
+    - 5000.0
+    data:
+    - - 0.64784166
+      - 0.022076357
+      - -1.4305209e-05
+      - 5.2607964e-09
+      - -8.1928381e-13
+      - 13053.724
+      - 19.532652
+    - - 6.2257764
+      - 0.0093314796
+      - -2.9153207e-06
+      - 4.9304559e-10
+      - -3.2372762e-14
+      - 11049.153
+      - -10.589285
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 298.151
+    diameter: 4.721
+    rotational-relaxation: 1.0
+    note: "LJ parameters estimated by RMG: Tc= 401.627K Pc=  52.663bar Vc= 147.500cm3/mol\
+      \ Tb= 245.160K\t(CsH3R, CsH3R)"

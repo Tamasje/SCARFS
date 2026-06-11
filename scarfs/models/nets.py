@@ -27,6 +27,7 @@ def make_mlp(
     activation: str = "silu",
     layernorm: bool = True,
     final_activation: str | None = None,
+    spectral_norm: bool = False,
 ) -> nn.Sequential:
     """Build a feed-forward MLP.
 
@@ -42,17 +43,27 @@ def make_mlp(
     final_activation
         Optional activation on the output layer (e.g. ``"sigmoid"`` for [0,1] decoders); ``None``
         leaves the output linear (the default for rate regression).
+    spectral_norm
+        If ``True``, wrap every :class:`~torch.nn.Linear` layer with
+        :func:`torch.nn.utils.parametrizations.spectral_norm` (constrains the
+        operator norm of each weight matrix to ≤ 1, aiding Lipschitz stability).
     """
     if len(sizes) < 2:
         raise ValueError(f"make_mlp needs >= 2 sizes, got {sizes!r}")
     act = ACTIVATIONS[activation]
+
+    def _maybe_sn(linear: nn.Linear) -> nn.Module:
+        if spectral_norm:
+            return torch.nn.utils.parametrizations.spectral_norm(linear)
+        return linear
+
     layers: list[nn.Module] = []
     for i in range(len(sizes) - 2):
-        layers.append(nn.Linear(sizes[i], sizes[i + 1]))
+        layers.append(_maybe_sn(nn.Linear(sizes[i], sizes[i + 1])))
         if layernorm:
             layers.append(nn.LayerNorm(sizes[i + 1]))
         layers.append(act())
-    layers.append(nn.Linear(sizes[-2], sizes[-1]))
+    layers.append(_maybe_sn(nn.Linear(sizes[-2], sizes[-1])))
     if final_activation == "sigmoid":
         layers.append(nn.Sigmoid())
     elif final_activation is not None:
