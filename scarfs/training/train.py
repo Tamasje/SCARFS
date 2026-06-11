@@ -361,16 +361,8 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
     y_std = xb[:, :n_in]
     q = xb[:, n_in:]
 
-    # physical rate targets and dydt (yb is scaled; invert to physical for the loss)
-    # yb is arcsinh-scaled; invert to physical
-    rate_scaler = extras.get("rate_scaler")
-    if rate_scaler is not None:
-        target_rates_phys = torch.as_tensor(
-            rate_scaler.inverse_transform(yb.detach().cpu().numpy()),
-            dtype=torch.float32, device=device,
-        )
-    else:
-        target_rates_phys = yb  # fallback: use scaled as proxy
+    # rate targets stay in the head's native ArcsinhScaler space (yb as built by the bundle);
+    # the physics-facing terms invert through extras["rates_to_physical_fn"] inside the loss.
 
     # absorption / dYdt / density arrays are SPLIT-LOCAL: `sel` indexes the train arrays during
     # train epochs and the val arrays during eval epochs — mixing them mis-labels every row.
@@ -395,10 +387,6 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
     else:
         rho = torch.ones(len(sel), dtype=torch.float32, device=device)
 
-    arcsinh_rate_scale = torch.as_tensor(
-        extras.get("arcsinh_rate_scale", np.ones(yb.shape[1])),
-        dtype=torch.float32, device=device,
-    )
     arcsinh_latent_scale = torch.as_tensor(
         extras.get("arcsinh_latent_scale", np.ones(cfg.model.latent_dim)),
         dtype=torch.float32, device=device,
@@ -457,19 +445,19 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
         model=model,
         y_std_scaled=y_std,
         q=q,
-        target_rates_phys=target_rates_phys,
+        target_rates_scaled=yb,
         absorption_target=at,
         dydt_dry_phys=dydt_dry_phys,
         rho=rho,
         row_weights=wb,
         enthalpy_weights=enthalpy_weights,
         species_weights_qoi=species_weights_qoi,
-        arcsinh_rate_scale=arcsinh_rate_scale,
         arcsinh_latent_scale=arcsinh_latent_scale,
         sigma_active=sigma_active,
         sigma_comp_all=sigma_comp_all,
         active_col_idx=active_col_idx,
         energy_arcsinh_scale=float(extras.get("energy_arcsinh_scale", 1.0)),
+        rates_to_physical_fn=extras.get("rates_to_physical_fn"),
         rate_weight=cfg.loss.rate_weight,
         latent_source_weight=cfg.loss.latent_source_weight,
         energy_weight=cfg.loss.energy_weight,
@@ -687,6 +675,16 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         T = q[..., 0] * t_scale + t_mean
         return thermo_active.absorption_from_rates_torch(rates_phys, T)
 
+    # differentiable inverse of the ArcsinhScaler: scaled head output -> physical mass rates.
+    # x = sinh(z·σ_std + μ_std)·s ; the pre-sinh clamp at ±30 (sinh(30) ≈ 5e12 — far beyond any
+    # physical rate) is a pure overflow guard, not a learning bound.
+    _r_mu = _torch.as_tensor(rate_scaler._std.mean_, dtype=_torch.float32)
+    _r_sig = _torch.as_tensor(rate_scaler._std.scale_, dtype=_torch.float32)
+    _r_s = _torch.as_tensor(rate_scaler.scale_, dtype=_torch.float32)
+
+    def _rates_to_physical(rates_scaled):
+        return _torch.sinh((rates_scaled * _r_sig + _r_mu).clamp(-30.0, 30.0)) * _r_s
+
     # Lagrangian pairs
     if cfg.loss.rollout_mode == "lagrangian":
         from .datamodule import case_step_pairs
@@ -718,6 +716,7 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         "molar_mass": thermo_active.molar_mass,
         "element_matrix": thermo_active.element_matrix,
         "absorption_from_rates_fn": _absorption_from_rates,
+        "rates_to_physical_fn": _rates_to_physical,
         "energy_arcsinh_scale": energy_scale,
     }
 
@@ -751,8 +750,9 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
             for start in range(0, len(Xv), cfg.optim.batch_size):
                 xb = Xv[start: start + cfg.optim.batch_size]
                 out = model.forward(xb[:, :n_in], xb[:, n_in:])
+                rates_phys = _rates_to_physical(out["rates"])
                 preds_rate.append(
-                    _absorption_from_rates(out["rates"], xb[:, n_in:]).cpu().numpy()
+                    _absorption_from_rates(rates_phys, xb[:, n_in:]).cpu().numpy()
                 )
                 preds_head.append(out["absorption"].squeeze(-1).cpu().numpy())
         abs_metrics = {
@@ -872,6 +872,9 @@ def _save_artifacts_merged(
         "composition_mean": comp_mean,
         "composition_scale": comp_scale,
         "arcsinh_latent_scale": arcsinh_latent_scale.tolist(),
+        # Head output convention: rate head emits ArcsinhScaler-space values (physical =
+        # scalers inverse); latent head emits arcsinh(omega_Z / s_Z) (physical = sinh(.)·s_Z).
+        "head_space": "arcsinh_scaled",
         "energy_calibration": energy_calibration or {"scale": 1.0, "floor": 0.0},
         "rate_source": getattr(bundle.scalers, "rate_source", "r_mass"),
         "mech_yaml": cfg.data.mech_yaml,

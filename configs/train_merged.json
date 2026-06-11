@@ -1,5 +1,5 @@
 {
-  "_comment": "Merged model: full dry input, energy-active targets, Lagrangian rollout, spectral norm, tail+enthalpy weighting. Bootstrap on stride5 (non-certifying). Certification on HPC front-adaptive DB.",
+  "_comment": "Merged model: full dry input, energy-active targets, spectral norm, tail+enthalpy weighting. NOTE: rollout_mode=lagrangian assumes fine-dtau (front-adaptive) data; on stride-stored databases the explicit-Euler step is ill-posed for stiff latent dims - use manifold there. Certification on HPC front-adaptive DB.",
   "data": {
     "database_path": "Database_FINAL.parquet",
     "input_species": "dry_all",
@@ -9,8 +9,16 @@
     "split_by_case": true,
     "inlet_conversion_threshold": 0.05,
     "inlet_weight": 5.0,
-    "species_weights": {"C2H4": 150, "C3H6": 100, "CH4": 20, "H2": 10},
-    "composition_feature_range": [0.0, 1.0],
+    "species_weights": {
+      "C2H4": 150,
+      "C3H6": 100,
+      "CH4": 20,
+      "H2": 10
+    },
+    "composition_feature_range": [
+      0.0,
+      1.0
+    ],
     "seed": 0,
     "energy_active_coverage": 0.999,
     "mech_yaml": "chem_ForTransport.yaml",
@@ -21,16 +29,28 @@
   "model": {
     "kind": "merged",
     "latent_dim": 8,
-    "decoder_hidden": [128, 256],
-    "rate_hidden": [128, 128],
-    "latent_source_hidden": [128, 128],
-    "energy_hidden": [64, 64],
+    "decoder_hidden": [
+      128,
+      256
+    ],
+    "rate_hidden": [
+      128,
+      128
+    ],
+    "latent_source_hidden": [
+      128,
+      128
+    ],
+    "energy_hidden": [
+      64,
+      64
+    ],
     "activation": "silu",
     "spectral_norm": true
   },
   "optim": {
     "lr": 0.001,
-    "weight_decay": 1e-6,
+    "weight_decay": 1e-06,
     "epochs": 300,
     "batch_size": 4096,
     "grad_clip": 1.0,

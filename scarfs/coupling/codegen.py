@@ -676,8 +676,11 @@ def _numpy_mirror_eval(
     y_dec_std = _numpy_forward(z, q_nn, weights_dict["decoder_layers"])  # (B, n_dry)
     z_proj = _numpy_encoder(y_dec_std, weights_dict["encoder_W"])        # (B, k)
 
-    # Latent source ω_Z
+    # Latent source ω_Z: head emits arcsinh(ω_Z / s_Z); physical = sinh(·)·s_Z.
+    # The pre-sinh clip at ±20 is a pure overflow guard shared by torch/numpy/C.
+    s_z = np.asarray(spec["arcsinh_latent_scale"], dtype=float)
     omega_z = _numpy_forward(z_proj, q_nn, weights_dict["latent_source_layers"])  # (B, k)
+    omega_z = np.sinh(np.clip(omega_z, -20.0, 20.0)) * s_z
 
     # Energy absorption head
     raw_energy = _numpy_forward(z_proj, q_nn, weights_dict["energy_layers"])  # (B, 1)
@@ -793,7 +796,9 @@ def _torch_eval(
         z = torch.clamp(z, lat_min_t, lat_max_t)
         y_dec_std = model.decode(z, q_t)
         z_proj = model.encode(y_dec_std)
-        omega_z = model.latent_source(z_proj, q_t)
+        # head emits arcsinh(ω_Z / s_Z); physical = sinh(·)·s_Z (clip = shared overflow guard)
+        s_z_t = torch.as_tensor(np.asarray(spec["arcsinh_latent_scale"], dtype=np.float32))
+        omega_z = torch.sinh(model.latent_source(z_proj, q_t).clamp(-20.0, 20.0)) * s_z_t
         absorption = model.absorption(z_proj, q_t)
 
     y_dec_std_np = y_dec_std.numpy()
@@ -1127,6 +1132,7 @@ def _render_header(
         f"/* --- Latent envelope for OOD clamping --- */",
         _c_double_array("MC_LAT_MIN", np.asarray(stats["latent_env_min"])),
         _c_double_array("MC_LAT_MAX", np.asarray(stats["latent_env_max"])),
+        _c_double_array("MC_LS_ASINH_SCALE", np.asarray(spec["arcsinh_latent_scale"])),
         "",
         "/* --- Composition scaler (LINEAR standardisation: y_std = (Y - mu) / sigma) --- */",
         _c_double_array("MC_COMP_MEAN", comp_mean),
@@ -1348,6 +1354,13 @@ static void mc_latent_source_vec(const double *z_proj, const double *q, double *
                 MC_LS_IN, MC_LS_OUT, MC_LS_W, MC_LS_B,
                 MC_LS_N_LN, MC_LS_LN_GAMMA, MC_LS_LN_BETA, MC_LS_LN_EPS_ARR,
                 zq, omega_z);
+    /* head emits arcsinh(omega_Z / s_Z); physical = sinh(.)*s_Z (clip = overflow guard) */
+    for (i = 0; i < MC_K; ++i) {{
+        double a = omega_z[i];
+        if (a > 20.0) a = 20.0;
+        if (a < -20.0) a = -20.0;
+        omega_z[i] = sinh(a) * MC_LS_ASINH_SCALE[i];
+    }}
 }}
 
 /* Absorption head: strictly positive via softplus + calibration */
@@ -1764,6 +1777,13 @@ static void mc_latent_source_vec(const double *z_proj, const double *q, double *
                 MC_LS_IN, MC_LS_OUT, MC_LS_W, MC_LS_B,
                 MC_LS_N_LN, MC_LS_LN_GAMMA, MC_LS_LN_BETA, MC_LS_LN_EPS_ARR,
                 zq, omega_z);
+    /* head emits arcsinh(omega_Z / s_Z); physical = sinh(.)*s_Z (clip = overflow guard) */
+    for (i = 0; i < MC_K; ++i) {{
+        double a = omega_z[i];
+        if (a > 20.0) a = 20.0;
+        if (a < -20.0) a = -20.0;
+        omega_z[i] = sinh(a) * MC_LS_ASINH_SCALE[i];
+    }}
 }}
 
 static double mc_absorption(const double *z_proj, const double *q)

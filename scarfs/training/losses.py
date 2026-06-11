@@ -121,60 +121,59 @@ def neuralcoil_composite(
 # Merged-model loss terms
 # ---------------------------------------------------------------------------
 
-def arcsinh_rate_loss(
-    pred_rates: torch.Tensor,
-    target_rates: torch.Tensor,
+def scaled_rate_loss(
+    pred_rates_scaled: torch.Tensor,
+    target_rates_scaled: torch.Tensor,
     row_weights: torch.Tensor,
     species_weights: torch.Tensor,
-    arcsinh_scale: torch.Tensor,
 ) -> torch.Tensor:
-    """Arcsinh-space MSE on physical (unscaled) mass rates with per-row and per-species weights.
+    """Weighted MSE on rates in the SCALED (ArcsinhScaler) space — the head's native space.
 
-    The arcsinh transform is applied inside the loss so the scale constants ``arcsinh_scale`` are
-    frozen from the PCA-init pre-pass and remain constant throughout training (unlike the normal
-    ArcsinhScaler which standardises further).
+    The rate head emits ArcsinhScaler-space values (standardised arcsinh, O(1) per output).
+    Training the head to emit PHYSICAL rates was tried and fails structurally: physical mass
+    rates span ~9 decades, which a (spectral-normed) linear-output MLP cannot express — the
+    observed result was a rate term stuck ~1e3 in arcsinh-diff units and near-zero rate-derived
+    energy. The scaled-head convention also matches the adapter, the bundle scalers and the
+    UDF exporter (one inversion point, ``rates_to_physical_fn``, owned by the trainer).
 
     Parameters
     ----------
-    pred_rates, target_rates
-        ``(batch, n_species)`` physical mass rates [kg m-3 s-1].
+    pred_rates_scaled, target_rates_scaled
+        ``(batch, n_species)`` ArcsinhScaler-space rates (the bundle's Y arrays).
     row_weights
         ``(batch,)`` combined importance + tail weights.
     species_weights
-        ``(n_species,)`` enthalpy-aware per-species weights (floor 1.0).
-    arcsinh_scale
-        ``(n_species,)`` frozen per-species scale constants (median |rate| from PCA-init pass).
+        ``(n_species,)`` enthalpy-aware per-species weights (bounded [floor, cap]).
     """
-    pred_t = torch.arcsinh(pred_rates / arcsinh_scale.unsqueeze(0))
-    tgt_t = torch.arcsinh(target_rates / arcsinh_scale.unsqueeze(0))
-    err = _mse(pred_t, tgt_t)                              # (batch, n_species)
+    err = _mse(pred_rates_scaled, target_rates_scaled)     # (batch, n_species)
     err = err * species_weights.unsqueeze(0)
     err = err.mean(dim=1) * row_weights
     return err.mean()
 
 
 def latent_source_loss(
-    pred_latent_src: torch.Tensor,
-    target_latent_src: torch.Tensor,
+    pred_latent_src_scaled: torch.Tensor,
+    target_latent_src_phys: torch.Tensor,
     arcsinh_scale: torch.Tensor,
 ) -> torch.Tensor:
-    """Arcsinh-space MSE for the latent-source head (ω_Z).
+    """MSE for the latent-source head in its native arcsinh space.
 
-    Target is ``E·(dYdt ⊘ σ_comp)`` computed with the CURRENT encoder weights inside the
-    composite loss (so E evolves).  ``arcsinh_scale`` are frozen per-dim scale constants.
+    The head emits ``arcsinh(ω_Z / s_Z)`` (scaled); the target is the PHYSICAL
+    ``E·(dYdt ⊘ σ_comp)`` computed with the CURRENT (detached) encoder weights inside the
+    composite, transformed here with the frozen per-dim scales ``s_Z``. Physical ω_Z for
+    transport/rollout/UDF is recovered as ``sinh(head)·s_Z``.
 
     Parameters
     ----------
-    pred_latent_src
-        ``(batch, k)`` predicted latent source.
-    target_latent_src
-        ``(batch, k)`` target latent source (computed dynamically from encoder + dYdt).
+    pred_latent_src_scaled
+        ``(batch, k)`` head output (scaled space).
+    target_latent_src_phys
+        ``(batch, k)`` physical target latent source [1/s].
     arcsinh_scale
         ``(k,)`` frozen per-dim arcsinh scale constants.
     """
-    pred_t = torch.arcsinh(pred_latent_src / arcsinh_scale.unsqueeze(0))
-    tgt_t = torch.arcsinh(target_latent_src / arcsinh_scale.unsqueeze(0))
-    return _mse(pred_t, tgt_t).mean()
+    tgt_t = torch.arcsinh(target_latent_src_phys / arcsinh_scale.unsqueeze(0))
+    return _mse(pred_latent_src_scaled, tgt_t).mean()
 
 
 def _weighted_mean(err: torch.Tensor, row_weights: torch.Tensor | None) -> torch.Tensor:
@@ -281,12 +280,12 @@ def split_head_consistency(
     true_contrib = (dydt_dry_true[:, active_col_idx] / sigma_active.unsqueeze(0)) @ e_act.t()
     residual = (z_dot_true - true_contrib).detach()
     consistency_target = pred_contrib + residual                                         # (batch, k)
-    # arcsinh space at the frozen latent scale: raw z-dot components reach ~1e8 (trace-species
-    # σ-amplification), so a raw-unit MSE here dominates the whole composite by ~10 orders of
-    # magnitude and hijacks every gradient (observed: this single term at 2.3e11).
-    pred_t = torch.arcsinh(z_t / arcsinh_scale)
+    # The latent head output z_t is ALREADY in arcsinh space; transform only the (physical)
+    # consistency target. Raw z-dot components reach ~1e8 (trace-species σ-amplification), so a
+    # raw-unit MSE here dominates the whole composite by ~10 orders of magnitude and hijacks
+    # every gradient (observed: this single term at 2.3e11).
     tgt_t = torch.arcsinh(consistency_target / arcsinh_scale)
-    return _mse(pred_t, tgt_t).mean()
+    return _mse(z_t, tgt_t).mean()
 
 
 def lagrangian_rollout_loss(
@@ -324,7 +323,7 @@ def merged_composite(
     model,
     y_std_scaled: torch.Tensor,
     q: torch.Tensor,
-    target_rates_phys: torch.Tensor,
+    target_rates_scaled: torch.Tensor,
     absorption_target: torch.Tensor,
     dydt_dry_phys: torch.Tensor,
     rho: torch.Tensor,
@@ -332,12 +331,12 @@ def merged_composite(
     enthalpy_weights: torch.Tensor,
     species_weights_qoi: torch.Tensor,
     *,
-    arcsinh_rate_scale: torch.Tensor,
     arcsinh_latent_scale: torch.Tensor,
     sigma_active: torch.Tensor,
     sigma_comp_all: torch.Tensor,
     active_col_idx: torch.Tensor,
     energy_arcsinh_scale: torch.Tensor | float = 1.0,
+    rates_to_physical_fn=None,
     # loss weights
     rate_weight: float = 1.0,
     latent_source_weight: float = 1.0,
@@ -386,8 +385,10 @@ def merged_composite(
         ``(batch, n_dry)`` standardised (linear, no log) input composition.
     q
         ``(batch, n_thermo)`` standardised thermo block.
-    target_rates_phys
-        ``(batch, n_active)`` physical mass rates for the energy-active species [kg m-3 s-1].
+    target_rates_scaled
+        ``(batch, n_active)`` ArcsinhScaler-space rate targets (the bundle's Y arrays) — the
+        rate head's native output space. ``rates_to_physical_fn`` recovers physical rates
+        where the physics needs them (energy tie, consistency, atom balance).
     absorption_target
         ``(batch,)`` DB absorption target [J m-3 s-1] (clipped negatives to 0 upstream).
     dydt_dry_phys
@@ -442,14 +443,18 @@ def merged_composite(
     encoder_weight_full = model.encoder.weight.detach()            # (k, n_dry)
     z_dot_true = (dydt_dry_phys / sigma_comp_all.unsqueeze(0)) @ encoder_weight_full.t()
 
+    # single inversion point: physical rates for the physics-facing terms (energy tie,
+    # consistency, atom balance); identity when no inverse fn is supplied (tests/stubs).
+    rates_pred_phys = (
+        rates_to_physical_fn(rates_pred) if rates_to_physical_fn is not None else rates_pred
+    )
+
     parts: dict[str, float] = {}
     total = torch.tensor(0.0, device=y_std_scaled.device)
 
-    # -- 1. Physical-rate loss (arcsinh + enthalpy weights + tail weights) ---------------
+    # -- 1. Rate loss in the head's native scaled space (enthalpy + tail weights) --------
     if rates_pred is not None and rate_weight > 0.0:
-        rl = arcsinh_rate_loss(
-            rates_pred, target_rates_phys, row_weights, enthalpy_weights, arcsinh_rate_scale
-        )
+        rl = scaled_rate_loss(rates_pred, target_rates_scaled, row_weights, enthalpy_weights)
         total = total + rate_weight * rl
         parts["rate"] = float(rl.detach())
 
@@ -461,8 +466,8 @@ def merged_composite(
 
     # -- 3–5. Energy terms (arcsinh space at the fixed physical scale; tail row-weighted) --
     if absorption_from_rates_fn is not None:
-        # rate-derived absorption (differentiable wrt rates_pred)
-        abs_from_rates = absorption_from_rates_fn(rates_pred, q)  # (batch,) or (batch,1)
+        # rate-derived absorption (differentiable wrt rates_pred via the physical inverse)
+        abs_from_rates = absorption_from_rates_fn(rates_pred_phys, q)  # (batch,) or (batch,1)
         abs_from_rates = abs_from_rates.squeeze(-1)               # (batch,)
 
         # 3. Rate-tied energy tie (F3)
@@ -502,7 +507,7 @@ def merged_composite(
     # -- 6. Split-head consistency -------------------------------------------------------
     if latent_src is not None and rates_pred is not None and consistency_weight > 0.0:
         cpen = split_head_consistency(
-            latent_src, rates_pred, rho, dydt_dry_phys, z_dot_true,
+            latent_src, rates_pred_phys, rho, dydt_dry_phys, z_dot_true,
             encoder_weight_full, active_col_idx, sigma_active,
             arcsinh_scale=arcsinh_latent_scale,
         )
@@ -528,9 +533,9 @@ def merged_composite(
         total = total + manifold_weight * manifold
         parts["manifold"] = float(manifold.detach())
 
-    # -- 10. Atom-balance ----------------------------------------------------------------
+    # -- 10. Atom-balance (physical rates) -------------------------------------------------
     if atom_balance_weight > 0.0 and molar_mass is not None and element_matrix is not None and rates_pred is not None:
-        abp = atom_balance_penalty(rates_pred, molar_mass, element_matrix)
+        abp = atom_balance_penalty(rates_pred_phys, molar_mass, element_matrix)
         total = total + atom_balance_weight * abp
         parts["atom_balance"] = float(abp.detach())
 
@@ -539,7 +544,9 @@ def merged_composite(
         if latent_src is not None:
             z_t_lag = z_out[idx_t]
             z_tp1_true = z_out.detach()[idx_tp1]  # treat future true as stopgrad
-            src_t_lag = latent_src[idx_t]
+            # physical ω_Z = sinh(head)·s_Z; pre-sinh clamp at ±20 is a pure inf-guard
+            # (sinh(20) ≈ 2.4e8 — far beyond any physical latent source magnitude).
+            src_t_lag = torch.sinh(latent_src[idx_t].clamp(-20.0, 20.0)) * arcsinh_latent_scale.unsqueeze(0)
             roll_loss = lagrangian_rollout_loss(z_t_lag, z_tp1_true, src_t_lag, dtau)
             total = total + roll_loss
             parts["lagrangian_rollout"] = float(roll_loss.detach())
