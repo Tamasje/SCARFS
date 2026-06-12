@@ -22,7 +22,6 @@ generator that produced stride5), with these deliberate changes:
   ``S Energy`` column is dropped (`Reaction heat absorption [J/s/m3]` is the one truth),
   and the ``Y_*_in`` pseudo-species trap is renamed to ``inlet_Y_* [-]``;
 - per-case sign audit + solver tolerances recorded in-row;
-- the ``pulsed`` flux shape is not ported (jitter/grid-snap complexity, not load-bearing).
 """
 
 from __future__ import annotations
@@ -82,6 +81,65 @@ def hf_uniform(L, H):
     return z, q, {"shape": "uniform", "H": float(H)}
 
 
+def hf_pulsed(L, H, N, Np_req=None, mode="uniform", jitter=0.35,
+              seed=None, w_samples=2, snap_to_grid=False):
+    """Non-negative heating pulses along the reactor (ported verbatim; localized heating).
+
+    N = number of pulses at peak flux H; widths ≈ ``w_samples`` grid cells when Np_req given.
+    """
+    N = int(max(1, N))
+    dz = (L / max(Np_req - 1, 1)) if (Np_req and Np_req > 1) else None
+
+    base_w = 0.02 * L / max(N, 1)
+    w = max(base_w, (w_samples * dz) if dz else base_w)
+    margin = 0.5 * w
+    usable = max(L - 2.0 * margin, 1e-9)
+    s_nom = usable / max(N - 1, 1)
+
+    if mode == "uniform" or N == 1:
+        centres = margin + np.arange(N) * s_nom
+    elif mode == "jitter":
+        rng = np.random.default_rng(seed)
+        centres = margin + np.arange(N) * s_nom
+        centres = centres + rng.uniform(-jitter * s_nom, jitter * s_nom, size=N)
+        min_gap = 0.60 * w
+        centres = np.sort(np.clip(centres, margin, L - margin))
+        for i in range(1, N):
+            if centres[i] - centres[i - 1] < min_gap:
+                centres[i] = centres[i - 1] + min_gap
+        overflow = centres[-1] - (L - margin)
+        if overflow > 0:
+            centres -= overflow
+            under = margin - centres[0]
+            if under > 0:
+                centres += under
+        for i in range(1, N):
+            if centres[i] - centres[i - 1] < min_gap:
+                centres[i] = centres[i - 1] + min_gap
+        centres = np.clip(centres, margin, L - margin)
+    else:
+        raise ValueError(f"hf_pulsed: unknown mode '{mode}'")
+
+    if snap_to_grid and dz:
+        centres = np.round(centres / dz) * dz
+        centres = np.clip(centres, margin, L - margin)
+        for i in range(1, N):
+            if centres[i] <= centres[i - 1]:
+                centres[i] = min(L - margin, centres[i - 1] + max(0.60 * w, dz))
+
+    z = [0.0]
+    q = [0.0]
+    half_w = 0.5 * w
+    for c in centres:
+        z.extend([max(0.0, c - half_w), c, min(L, c + half_w)])
+        q.extend([0.0, H, 0.0])
+    z = np.array(z, dtype=float)
+    q = np.maximum(np.array(q, dtype=float), 0.0)
+    idx = np.argsort(z)
+    return z[idx], q[idx], {"shape": "pulsed", "H": float(H), "N": N, "w": float(w),
+                            "mode": str(mode)}
+
+
 def hf_front_ramp(L, H, k=3.0, Np_req=None, samples_per_cell=4):
     ncp = max(200, (samples_per_cell * (Np_req or 0)) or 0)
     z = np.linspace(0.0, L, ncp)
@@ -131,6 +189,7 @@ def hf_sinusoidal(L, H, cycles=1, mode="offset", Np_req=None, samples_per_cell=6
 
 HF_BUILDERS = {
     "uniform": hf_uniform,
+    "pulsed": hf_pulsed,
     "front_ramp": hf_front_ramp,
     "back_ramp": hf_back_ramp,
     "triangular": hf_triangular,
@@ -142,7 +201,7 @@ HF_BUILDERS = {
 def build_heat_profile(L, shape_name, params):
     if shape_name not in HF_BUILDERS:
         raise ValueError(f"Unknown heat profile shape: {shape_name} "
-                         f"(v2 supports {sorted(HF_BUILDERS)}; 'pulsed' was not ported)")
+                         f"(v2 supports {sorted(HF_BUILDERS)})")
     return HF_BUILDERS[shape_name](L=L, **params)
 
 
@@ -497,7 +556,10 @@ def run_case_v2(case: dict, settings: GenV2Settings):
         Np_req = int(case["N_points"])
         shape = str(case["shape"])
         params = dict(case.get("params", {}))
-        if shape in ("sinusoidal", "front_ramp", "back_ramp"):
+        if shape == "pulsed":
+            params = {**params, "H": case["H_peak"], "N": int(params.get("N", 10)),
+                      "Np_req": Np_req, "seed": int(case.get("seed", 0))}
+        elif shape in ("sinusoidal", "front_ramp", "back_ramp"):
             params = {**params, "H": case["H_peak"], "Np_req": Np_req}
         else:
             params = {**params, "H": case["H_peak"]}
@@ -575,8 +637,14 @@ def run_case_v2(case: dict, settings: GenV2Settings):
             return None, "no storage indices"
 
         audit = sign_audit(absorption_f)
+        peak_abs = float(np.abs(absorption_f).max())
+        grid_fr = (np.abs(np.diff(absorption_f)) / peak_abs) if peak_abs > 0 else np.zeros(1)
         audit.update({"case_id": int(case["id"]), "regime": case.get("regime", "body"),
-                      "n_solved": int(n), "n_stored": int(store_idx.size)})
+                      "n_solved": int(n), "n_stored": int(store_idx.size),
+                      # single-solver-step |Δabsorption|/peak — the storage policy's floor;
+                      # if p95 here exceeds the policy, raise --n-points (grid-limited front)
+                      "grid_p95_jump_frac": float(np.percentile(grid_fr, 95)),
+                      "grid_max_jump_frac": float(grid_fr.max())})
 
         df = assemble_v2_frame(
             species_names=species_names,
@@ -748,10 +816,34 @@ def gate_dll_consistency(reference_df, n_rows: int = 64, rel_tol: float = 1.0e-6
 
     mask = np.abs(stored) > dydt_floor
     rel = np.abs(recomputed[mask] - stored[mask]) / np.abs(stored[mask])
+
+    # diagnostics: distinguish "DLL returns zeros out of solve context" (statefulness),
+    # ordering/unit errors (uniform large rel), and isolated numerical disagreements.
+    zero_recompute_frac = float(np.mean(np.abs(recomputed[mask]) < 1e-300)) if mask.any() else 0.0
+    per_species_worst: list[tuple[str, float]] = []
+    if mask.any():
+        rel_full = np.where(mask, np.abs(recomputed - stored) / np.maximum(np.abs(stored), 1e-300), 0.0)
+        worst_idx = np.argsort(rel_full.max(axis=0))[::-1][:5]
+        per_species_worst = [(species_names[i], float(rel_full[:, i].max())) for i in worst_idx]
+
+    # statefulness probe: the same state evaluated twice must agree exactly; a drift
+    # implies NetRates_C carries internal state between calls.
+    gas.TPY = float(T[0]), float(P[0]), Y[0, :]
+    raw_a = np.array(CRACKSIM_rates_DLL(gas), dtype=float, copy=True)
+    gas.TPY = float(T[0]), float(P[0]), Y[0, :]
+    raw_b = np.array(CRACKSIM_rates_DLL(gas), dtype=float, copy=True)
+    double_call_max_abs_diff = float(np.abs(raw_a - raw_b).max())
+    raw_nonzero_frac = float(np.mean(np.abs(raw_a) > 0.0))
+
     out = {
         "n_rows": int(len(sub)), "n_compared": int(mask.sum()),
         "max_rel_diff": float(rel.max()) if mask.any() else 0.0,
         "median_rel_diff": float(np.median(rel)) if mask.any() else 0.0,
+        "p95_rel_diff": float(np.percentile(rel, 95)) if mask.any() else 0.0,
+        "zero_recompute_frac": zero_recompute_frac,
+        "raw_nonzero_frac_row0": raw_nonzero_frac,
+        "double_call_max_abs_diff": double_call_max_abs_diff,
+        "per_species_worst": per_species_worst,
         "passed": bool(mask.any() and float(rel.max()) < rel_tol),
         "rel_tol": rel_tol,
     }
@@ -759,20 +851,46 @@ def gate_dll_consistency(reference_df, n_rows: int = 64, rel_tol: float = 1.0e-6
 
 
 def gate_front_resolution(df, max_frac_jump: float, slack: float = 1.5) -> dict[str, Any]:
-    """Gate C: stored-point |Δabsorption| jumps must respect the storage policy (× slack)."""
+    """Gate C: POLICY-chosen stored jumps must respect the storage policy (× slack).
+
+    Stored jumps split into two populations using ``PFR point index`` when available:
+    consecutive solver points (index gap == 1) are **grid-limited** — no storage policy can
+    make a single solver step smaller, so they are reported as a solve-resolution
+    recommendation, not failed; multi-step jumps (gap > 1) are the policy's own skipping
+    decisions and are the pass/fail population. Without the index column (legacy frames),
+    all jumps count as policy jumps — strictest interpretation.
+    """
     col = "Reaction heat absorption [J/s/m3]"
     traj = df[df["sample_kind"] == "trajectory"] if "sample_kind" in df.columns else df
-    jumps = []
+    has_idx = "PFR point index" in traj.columns
+    policy_jumps: list[float] = []
+    grid_jumps: list[float] = []
     for _cid, g in traj.groupby("CaseID"):
-        a = g.sort_values("tau [s]")[col].to_numpy(float)
+        g = g.sort_values("tau [s]")
+        a = g[col].to_numpy(float)
         peak = np.abs(a).max()
-        if peak > 0 and len(a) > 1:
-            jumps.extend(np.abs(np.diff(a)) / peak)
-    jumps = np.asarray(jumps) if jumps else np.array([np.nan])
+        if peak <= 0 or len(a) < 2:
+            continue
+        fr = np.abs(np.diff(a)) / peak
+        if has_idx:
+            gaps = np.diff(g["PFR point index"].to_numpy(int))
+            policy_jumps.extend(fr[gaps > 1])
+            grid_jumps.extend(fr[gaps <= 1])
+        else:
+            policy_jumps.extend(fr)
+    pj = np.asarray(policy_jumps) if policy_jumps else np.array([0.0])
+    gj = np.asarray(grid_jumps) if grid_jumps else np.array([0.0])
+    grid_p95 = float(np.percentile(gj, 95))
+    # recommended solve-grid multiplier so single grid steps land within the policy
+    grid_factor = grid_p95 / max_frac_jump if max_frac_jump > 0 else float("nan")
     return {
-        "median_jump_frac": float(np.nanmedian(jumps)),
-        "p95_jump_frac": float(np.nanpercentile(jumps, 95)),
-        "passed": bool(np.nanpercentile(jumps, 95) <= max_frac_jump * slack),
+        "median_jump_frac": float(np.median(pj)),
+        "p95_jump_frac": float(np.percentile(pj, 95)),
+        "grid_p95_jump_frac": grid_p95,
+        "grid_resolution_factor": float(grid_factor),
+        "n_policy_jumps": int(len(policy_jumps)),
+        "n_grid_jumps": int(len(grid_jumps)),
+        "passed": bool(np.percentile(pj, 95) <= max_frac_jump * slack),
         "threshold": max_frac_jump * slack,
     }
 

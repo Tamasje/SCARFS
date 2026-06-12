@@ -248,7 +248,7 @@ def test_flux_builders_nonnegative_and_peak_bounded():
     zs = np.linspace(0, L, 257)
     shapes = [("uniform", {}), ("triangular", {}), ("gaussian_pair", {}),
               ("sinusoidal", {"Np_req": 200}), ("front_ramp", {"Np_req": 200}),
-              ("back_ramp", {"Np_req": 200})]
+              ("back_ramp", {"Np_req": 200}), ("pulsed", {"N": 6, "Np_req": 200})]
     # act / assert
     for name, params in shapes:
         z, q, meta = build_heat_profile(L, name, {**params, "H": H})
@@ -260,8 +260,58 @@ def test_flux_builders_nonnegative_and_peak_bounded():
         assert meta["shape"] == name
 
 
-def test_pulsed_shape_is_explicitly_unsupported():
-    """The unported 'pulsed' shape raises a clear error instead of silently misbehaving."""
+def test_every_default_manifest_shape_is_buildable():
+    """REGRESSION (Windows smoke 2026-06-12): the manifest sampled 'pulsed' but the v2
+    builder set lacked it -> 4/10 smoke cases dropped. Every shape the sampler can emit
+    must build a valid non-negative profile with the runner-supplied params."""
+    from scarfs.data.config import DataGenConfig
+
+    # arrange
+    cfg = DataGenConfig()
+    # act / assert: exercise each default shape exactly as run_case_v2 parameterises it
+    for shape_name, shape_params in cfg.shapes:
+        params = dict(shape_params)
+        if shape_name == "pulsed":
+            params = {**params, "H": 9e4, "N": int(params.get("N", 10)), "Np_req": 400,
+                      "seed": 3}
+        elif shape_name in ("sinusoidal", "front_ramp", "back_ramp"):
+            params = {**params, "H": 9e4, "Np_req": 400}
+        else:
+            params = {**params, "H": 9e4}
+        z, q, meta = build_heat_profile(7.5, shape_name, params)
+        f = make_piecewise(z, q)
+        vals = np.array([f(zz) for zz in np.linspace(0, 7.5, 301)])
+        assert vals.min() >= 0.0, shape_name
+        assert vals.max() > 0.0, shape_name
+        assert meta["shape"] == shape_name
+
+
+def test_unknown_shape_raises_clearly():
+    """An unknown shape still raises with the supported list in the message."""
     # arrange / act / assert
-    with pytest.raises(ValueError, match="pulsed"):
-        build_heat_profile(5.0, "pulsed", {"H": 1e5})
+    with pytest.raises(ValueError, match="Unknown heat profile shape"):
+        build_heat_profile(5.0, "warp_drive", {"H": 1e5})
+
+
+def test_gate_front_resolution_separates_grid_limited_jumps():
+    """REGRESSION (Windows smoke 2026-06-12): single-solver-step jumps are the storage
+    policy's floor — they must inform the --n-points recommendation, not fail the gate."""
+    # arrange: a steep front where CONSECUTIVE solver points jump 10% of peak (grid-limited)
+    # while every policy-chosen skip (index gap > 1) respects the 3% policy
+    a = np.array([0.0, 0.01, 0.02, 0.12, 0.22, 0.32, 0.34, 0.36, 1.0]) * 1e8
+    idx = np.array([0, 40, 80, 81, 82, 83, 120, 160, 399])  # gaps: >1,>1,1,1,1,>1,>1,>1
+    df = pd.DataFrame({
+        "Reaction heat absorption [J/s/m3]": a,
+        "tau [s]": np.linspace(0, 0.1, len(a)),
+        "PFR point index": idx,
+        "CaseID": np.full(len(a), 1),
+        "sample_kind": ["trajectory"] * len(a),
+    })
+    # act
+    res = gate_front_resolution(df, max_frac_jump=0.7)  # policy jumps here are <= 0.64 of peak
+    strict = gate_front_resolution(df.drop(columns=["PFR point index"]), max_frac_jump=0.7)
+    # assert: grid-limited 10% steps are reported separately, not in the policy population
+    assert res["n_grid_jumps"] == 3 and res["n_policy_jumps"] == 5
+    assert res["grid_p95_jump_frac"] == pytest.approx(0.10, abs=1e-9)
+    assert res["passed"]
+    assert strict["n_policy_jumps"] == 8, "without the index column all jumps count (strict)"

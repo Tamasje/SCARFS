@@ -10,6 +10,7 @@ matplotlib>=3.6
 
 # --- a-priori harness extras (optional; numpy fallbacks exist) ---
 scipy>=1.10          # Sobol sampling + KDTree nearest-neighbour baseline
+scikit-learn>=1.3    # kNN feasibility pre-gate, parent re-scoring, ablation
 pyarrow>=12          # read/write the Parquet database
 
 # --- training (HPC) ---

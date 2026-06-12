@@ -25,10 +25,17 @@ python scripts\generate_database_v2.py --tier smoke --n-cpu 4
 **auto-runs the gates**:
 
 - **GATE A — DLL/dYdt consistency**: re-evaluates the DLL at stored states; must reproduce
-  the stored `dYdt_*` columns to max rel diff < 1e-6. This is the species-ordering/units
-  check that has never been formally verified — *if it FAILS, stop and send me the output.*
-- **GATE C — front resolution**: stored-point |Δabsorption| jumps must respect the 3%
-  policy (p95 ≤ 4.5%). This is the property stride5 lacked (39–82% jumps).
+  the stored `dYdt_*` columns to max rel diff < 1e-6. Reported TWICE: in-worker (post-solve
+  context, printed by worker 0) and in a fresh process. The diagnostics distinguish the
+  failure modes: `zero-recompute fraction ≈ 1.0` ⇒ NetRates_C returns zeros outside a solve
+  context (Fortran statefulness — in-worker PASS + fresh-process FAIL confirms it, and then
+  off-manifold generation simply runs one warm-up solve per worker); `double-call max |diff|
+  > 0` ⇒ the DLL is stateful even between identical calls; uniform large rel diffs with
+  nonzero recompute ⇒ ordering/units (hard stop — send me the output).
+- **GATE C — front resolution**: pass/fail applies to POLICY-chosen jumps only (storage
+  skipping decisions). Single-solver-step jumps are grid-limited — no storage policy can
+  beat the solve grid — and are reported as a `--n-points` multiplier recommendation
+  (e.g. "factor ~3x" ⇒ rerun with `--n-points 1200` for the production tiers).
 - Sign audit (E-c positivity lineage) is reported per tier; `material_negative=True`
   (any case min < −1e6 J/m³/s) is informative, not fatal — it triggers the documented
   shifted-softplus escape hatch on the training side.

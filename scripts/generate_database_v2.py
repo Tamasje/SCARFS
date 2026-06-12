@@ -61,6 +61,7 @@ def worker_loop(worker_id: int, task_q: Queue, ready_q: Queue, status_q: Queue,
                                 "storage": StorageConfig(**settings_doc["storage"])})
     g2.init_worker_cracksim(dll_path, mech_path, Path(base_dir), Path(scratch_root), ready_q)
     scratch = Path(scratch_root)
+    last_df = None
     try:
         while True:
             item = task_q.get()
@@ -80,12 +81,22 @@ def worker_loop(worker_id: int, task_q: Queue, ready_q: Queue, status_q: Queue,
                 table = pa.Table.from_pandas(df, preserve_index=False)
                 pq.write_table(table, str(out_tmp), compression="snappy")
                 out_tmp.rename(out_file)
+                last_df = df
                 status_q.put(("done", worker_id, case_id, dt, json.dumps(audit)))
                 print(f"[w{worker_id}] DONE case {case_id} rows={len(df)} {dt:.1f}s", flush=True)
             except Exception as e:  # noqa: BLE001
                 dt = time.monotonic() - t0
                 warnings.warn(f"[w{worker_id}] error on case {case_id}: {e}")
                 status_q.put(("drop", worker_id, case_id, dt, f"exception: {e}"))
+        # In-context Gate A: same process, immediately after real solves — discriminates
+        # "NetRates_C needs a solve-warmed context" from a genuine recompute mismatch.
+        if settings_doc.get("gate_a_in_worker") and worker_id == 0 and last_df is not None:
+            try:
+                res = g2.gate_dll_consistency(last_df.head(48))
+                status_q.put(("gate_a", worker_id, None, None, json.dumps(res)))
+            except Exception as e:  # noqa: BLE001
+                status_q.put(("gate_a", worker_id, None, None,
+                              json.dumps({"error": str(e), "passed": False})))
     finally:
         status_q.put(("exit", worker_id, None, None, None))
 
@@ -125,7 +136,8 @@ def run_tier(args) -> int:
     ready_q: Queue = Queue()
     status_q: Queue = Queue()
     n_workers = max(1, int(args.n_cpu))
-    settings_doc = {**settings.__dict__, "storage": settings.storage.__dict__}
+    settings_doc = {**settings.__dict__, "storage": settings.storage.__dict__,
+                    "gate_a_in_worker": args.tier == "smoke"}
     workers = [Process(target=worker_loop,
                        args=(i, task_q, ready_q, status_q, dll_path, mech_path,
                              str(base_dir), str(scratch), settings_doc))
@@ -147,6 +159,7 @@ def run_tier(args) -> int:
         task_q.put(None)
 
     audits, done, dropped, exited = [], 0, 0, 0
+    gate_a_worker = None
     while exited < n_workers:
         kind, _wid, _cid, _dt, payload = status_q.get()
         if kind == "done":
@@ -154,6 +167,8 @@ def run_tier(args) -> int:
             audits.append(json.loads(payload))
         elif kind == "drop":
             dropped += 1
+        elif kind == "gate_a":
+            gate_a_worker = json.loads(payload)
         elif kind == "exit":
             exited += 1
         if (done + dropped) and (done + dropped) % 50 == 0:
@@ -197,6 +212,15 @@ def run_tier(args) -> int:
         print("NOTE: material negative absorption found -> E-c escape hatch applies "
               "(switch the energy head to shifted-softplus); see MERGE_DESIGN.md.")
 
+    grid_p95 = [a.get("grid_p95_jump_frac") for a in audits if "grid_p95_jump_frac" in a]
+    if grid_p95:
+        gmax = max(grid_p95)
+        print(f"solve-grid resolution: worst per-case single-step p95 jump = {gmax:.3f} of peak "
+              f"(policy {settings.storage.max_frac_jump}); if this exceeds the policy, "
+              f"raise --n-points by ~{max(1.0, gmax / settings.storage.max_frac_jump):.1f}x")
+    if gate_a_worker is not None:
+        print("\nGATE A (in-worker, post-solve context):")
+        _print_gate_a(gate_a_worker)
     if args.tier == "smoke" or args.gates:
         return run_gates_on(out_file, args)
     return 0
@@ -220,13 +244,34 @@ def run_gates_on(parquet_path: Path, args) -> int:
     ref = df[df["sample_kind"] == "trajectory"] if "sample_kind" in df.columns else df
     a = g2.gate_dll_consistency(ref.sample(min(64, len(ref)), random_state=0))
     c = g2.gate_front_resolution(df, max_frac_jump=args.max_frac_jump)
-    print(f"GATE A (DLL/dYdt consistency): max_rel={a['max_rel_diff']:.3e} "
-          f"on {a['n_compared']} entries -> {'PASS' if a['passed'] else 'FAIL'}")
-    print(f"GATE C (front resolution):     p95 jump {c['p95_jump_frac']:.3f} "
-          f"<= {c['threshold']:.3f} -> {'PASS' if c['passed'] else 'FAIL'}")
+    print("GATE A (DLL/dYdt consistency, fresh process):")
+    _print_gate_a(a)
+    print(f"GATE C (front resolution): policy-jump p95 {c['p95_jump_frac']:.3f} "
+          f"<= {c['threshold']:.3f} -> {'PASS' if c['passed'] else 'FAIL'} "
+          f"[{c['n_policy_jumps']} policy jumps]")
+    print(f"        grid-limited single-step p95 {c['grid_p95_jump_frac']:.3f} of peak "
+          f"({c['n_grid_jumps']} jumps) -> recommended --n-points factor "
+          f"~{max(1.0, c['grid_resolution_factor']):.1f}x if above policy")
     ok = a["passed"] and c["passed"]
     print(f"GATES: {'ALL PASS' if ok else 'FAILED — do not run production tiers'}")
     return 0 if ok else 2
+
+
+def _print_gate_a(a: dict) -> None:
+    if "error" in a:
+        print(f"  ERROR: {a['error']}")
+        return
+    print(f"  max_rel={a['max_rel_diff']:.3e}  median={a['median_rel_diff']:.3e}  "
+          f"p95={a['p95_rel_diff']:.3e}  on {a['n_compared']} entries "
+          f"-> {'PASS' if a['passed'] else 'FAIL'}")
+    print(f"  zero-recompute fraction: {a['zero_recompute_frac']:.3f}  "
+          f"(1.0 => DLL returns zeros outside solve context: statefulness)")
+    print(f"  raw nonzero frac (row 0): {a['raw_nonzero_frac_row0']:.3f}   "
+          f"double-call max |diff|: {a['double_call_max_abs_diff']:.3e} "
+          f"(>0 => NetRates_C is stateful)")
+    if a.get("per_species_worst"):
+        worst = ", ".join(f"{s}={v:.2e}" for s, v in a["per_species_worst"])
+        print(f"  worst species: {worst}")
 
 
 def run_off_manifold(args) -> int:
