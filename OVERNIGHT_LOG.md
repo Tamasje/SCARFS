@@ -67,3 +67,18 @@ Training-experiment count is tracked against the 12-run cap; analyses (no traini
 - Verdict: fix corrects units/conditioning (floor 50→15.8 by construction; pre-registered
   caveat: the ≥25% numeric drop is a UNIT change, not learning). Val skill at k=8/14 epochs
   ≈ 0 → consistent with the H7 information ceiling; k-comparison (E6) is the discriminator.
+
+---
+
+## E6 · training exp 7 · 14-epoch full train, fix @ k=16 (config-only change vs E5)
+- Command: `.venv/bin/python -m scarfs.training.train --config runs/overnight_e6_cfg.json`.
+- Result: val latent_source 14.89 vs own-target Var 14.01 (audit cmd:
+  `scripts/overnight/e1_target_stats.py --bundle runs/overnight_e6_k16_fix --rows-cap 8000`)
+  → MSE/Var ≈ 0.96, still ≈ mean floor at this budget. BUT val absorption R²
+  **0.808 rate-derived / 0.307 head** — best of any run, at 14 epochs (k=8 14-ep: 0.668;
+  k=8 63-ep baseline: 0.708).
+- Verdict: (i) latent-head skill needs optimizer budget far beyond 14 shared epochs
+  (single-batch needed 2400 DEDICATED steps to reach 0.43·Var) — optimization budget
+  [CONFIRMED secondary factor] stacked on the H7 ceiling; (ii) k=16 materially improves the
+  CFD-relevant downstream (absorption) — consistent with the 2026-06-11 feasibility table
+  (PCA-12/16 PASS). E7 (60-epoch k=16) launched as the final discriminator/confirmation.
