@@ -118,3 +118,16 @@ Training-experiment count is tracked against the 12-run cap; analyses (no traini
   that the legacy ``std > 0`` guard fails even for NOMINALLY CONSTANT columns (float64
   std ≈ 1e-15, not 0 → 1e15 amplification under legacy).
 - E8 (k=16, 14 ep, floor=1e-10) launched as training exp 9.
+
+---
+
+## E8 · training exp 9 · 14-epoch, k=16 + sigma_floor=1e-10 (FIX-1 + FIX-2 stack)
+- Command: `.venv/bin/python -m scarfs.training.train --config runs/overnight_e8_cfg.json`.
+- Result: **val latent_source 3.81 → 1.355, monotonically DESCENDING** (first run ever to
+  leave its floor). Own-floor audit (`e1_target_stats.py --bundle runs/overnight_e8_k16_floor`):
+  Var(target)=5.40, model MSE=1.46 → **target-space R² ≈ 0.73 at 14 epochs** (all prior
+  runs: ≤0.10, flat). Val absorption R² rate-derived **0.9405** / head 0.636 at 14 epochs
+  (E6 same budget, no floor: 0.808 / 0.307).
+- Verdict: **RC-D was the binding constraint.** With the σ-floor the ω_Z target/basis are
+  clean and the head trains rapidly toward the audit ceiling (0.82); the cleaner basis also
+  accelerates the energy path. E9 (60-epoch confirm) = training exp 10, final.
