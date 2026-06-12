@@ -23,11 +23,14 @@ import numpy as np
 PALETTE = ["#3A0CA3", "#4361EE", "#7209B7", "#F72585", "#CBE0D1",
            "#FBEE43", "#00A320", "#4CC9F0"]
 
+# (run, label, color, Var(target) under that run's own s_Z — the predict-the-mean floor,
+#  measured by scripts/overnight/e1_target_stats.py --bundle <run>; commands in OVERNIGHT_LOG.md)
 RUNS = [
-    ("baseline k=8 (state-s_Z bug)", "runs/merged_bootstrap_stride5", PALETTE[0]),
-    ("fix k=8 (source-s_Z)", "runs/overnight_e5_k8_fix", PALETTE[3]),
-    ("fix k=16", "runs/overnight_e6_k16_fix", PALETTE[6]),
-    ("fix k=16 long", "runs/overnight_e7_k16_long", PALETTE[1]),
+    ("runs/merged_bootstrap_stride5", "baseline k=8 (state-s_Z bug)", PALETTE[0], 49.996),
+    ("runs/overnight_e5_k8_fix", "FIX-1 k=8 (source-s_Z)", PALETTE[2], 15.795),
+    ("runs/overnight_e6_k16_fix", "FIX-1 k=16", PALETTE[1], 14.007),
+    ("runs/overnight_e8_k16_floor", "FIX-1+2 k=16 (σ-floor)", PALETTE[6], 5.398),
+    ("runs/overnight_e9_k16_floor_long", "FIX-1+2 k=16 long", PALETTE[3], 5.398),
 ]
 
 
@@ -36,22 +39,20 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.6))
 
-    for label, run, color in RUNS:
+    for run, label, color, var_floor in RUNS:
         p = REPO / run / "metrics.json"
         if not p.exists():
             continue
         h = json.loads(p.read_text(encoding="utf-8"))["history"]
         ep = [r["epoch"] for r in h]
-        ls = [r.get("val_parts", {}).get("latent_source", np.nan) for r in h]
+        ls = [r.get("val_parts", {}).get("latent_source", np.nan) / var_floor for r in h]
         ax1.plot(ep, ls, color=color, label=label, lw=2)
-    ax1.axhline(49.996, color=PALETTE[0], ls=":", lw=1.2,
-                label="Var(target) under state-s_Z = mean-prediction floor")
-    ax1.axhline(15.795, color=PALETTE[3], ls=":", lw=1.2,
-                label="Var(target) under source-s_Z (k=8)")
+    ax1.axhline(1.0, color="k", ls=":", lw=1.2, label="predict-the-mean floor (MSE = Var)")
     ax1.set_xlabel("epoch")
-    ax1.set_ylabel("val latent_source (MSE, target space)")
-    ax1.set_title("The stuck term sits AT the predict-the-mean floor")
-    ax1.legend(fontsize=7.5, loc="center right")
+    ax1.set_ylabel("val latent_source MSE / Var(own target)\n(floor-relative; <1 = real skill)")
+    ax1.set_ylim(0, 1.15)
+    ax1.set_title("ω_Z head: floor-bound until s_Z fix + σ-floor")
+    ax1.legend(fontsize=7.5, loc="lower left")
 
     # single-batch overfit summary (numbers from the logged E2/E3/E2b/E3b/E4b runs;
     # regenerate with scripts/overnight/e2_single_batch.py — commands in OVERNIGHT_LOG.md)

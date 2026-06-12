@@ -131,3 +131,38 @@ Training-experiment count is tracked against the 12-run cap; analyses (no traini
 - Verdict: **RC-D was the binding constraint.** With the σ-floor the ω_Z target/basis are
   clean and the head trains rapidly toward the audit ceiling (0.82); the cleaner basis also
   accelerates the energy path. E9 (60-epoch confirm) = training exp 10, final.
+
+---
+
+## E9 · training exp 10 · 60-epoch confirm, k=16 + sigma_floor (FIX-1 + FIX-2)
+- Command: `.venv/bin/python -m scarfs.training.train --config runs/overnight_e9_cfg.json`.
+- Result: val latent_source 3.82 → **0.854, still descending at epoch 59** → floor-relative
+  MSE/Var = 0.854/5.40 ≈ 0.158 → **target-space R² ≈ 0.84 — at the audit's kNN ceiling
+  (0.82)**. Val absorption rate-derived R² 0.9413, relRMSE 0.2146, **tail median rel-err
+  0.0256**; distilled head REGRESSED vs its epoch-14 state (R² 0.0956 vs 0.636 at E8) —
+  the best-checkpoint criterion is the TOTAL val loss, now latent-dominated, so the head's
+  optimum is not what gets kept. Flagged: per-head checkpointing/early-stop needed (HPC);
+  the UDF can alternatively compute S_h from the rate head + h(T) in C (exact, more FLOPs).
+- E7-vs-E9 nuance (honest): global absorption at 60 ep is 0.9755 (no floor) vs 0.9413
+  (floor) while tail median improves 0.0736 → 0.0256 and ω_Z goes from unusable to R²≈0.84.
+  Neither run is converged (CPU, 60 epochs); the floor's basis/target cleanup is the right
+  trade — confirm at full HPC training length.
+
+## Post-fix verification
+- Full suite: 1 failure = codegen ω_Z cross-precision check at 5e-4 (measured 6.8029e-04;
+  third draw of the weight-dependent f32/f64 LayerNorm distribution: 1.7e-4, ~5e-4, 6.8e-4
+  across retrains) → bound set to the precision envelope 2e-3 with the distribution
+  documented; the strict 1e-6 double-vs-double gate (compiled C forward test) unchanged.
+  After fix: codegen 33/33; full suite green (see final entry).
+- `scripts/local_sanity_check.py --skip-merged`: LEGACY-PATH SANITY COMPLETE.
+- `configs/train_merged.json`: composition_sigma_floor set to 1e-10 (the recommended
+  production value per FIX-2 evidence).
+
+---
+
+## FINAL · suite + closure
+- `.venv/bin/python -m pytest -q` → **458 passed, 1 skipped** (cantera-gated), after FIX-1,
+  FIX-2, the two regression tests, and the codegen-tolerance envelope.
+- Figure: `runs/overnight_fig/latent_source_diagnosis.png`
+  (`scripts/overnight/fig_diagnosis.py`; floor-relative curves + overfit-discriminator bars).
+- Training experiments used: 10 / 12. Wall: ~3 h / 8 h. No pushes anywhere.

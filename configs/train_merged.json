@@ -24,7 +24,8 @@
     "mech_yaml": "chem_ForTransport.yaml",
     "tail_strata": 10,
     "tail_weight_alpha": 2.0,
-    "columns_projection": true
+    "columns_projection": true,
+    "composition_sigma_floor": 1e-10
   },
   "model": {
     "kind": "merged",

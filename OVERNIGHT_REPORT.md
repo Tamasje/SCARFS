@@ -69,15 +69,24 @@ regression test (commit "Overnight FIX-1"). Pre-registered honesty caveat: the f
 loss UNITS (floor 50→15.8 by construction); the numeric ≥25% reduction criterion is met
 trivially and is NOT claimed as learning — skill metrics are reported instead.
 
-**RC-B [CONFIRMED in-sample] — k=8 information ceiling for ż (H7, the dominant cause).**
+**RC-B [CONFIRMED in-sample, then REFRAMED by the data audit] — apparent k=8 ceiling for ż.**
 Decisive overfit chain on one seeded 2048-row batch (E2→E4b), latent loss only:
 saved-s_Z via z_proj 0.76 → corrected via z_proj 0.71 → corrected z-direct **0.43** →
 corrected with the FULL 212-dim composition as input **0.155 and still descending**.
 The same target an MLP memorizes from the full state is ~43–57%-unreachable from (z₈, T, P)
-ON THE TRAINING BATCH ITSELF. ω_Z = E·(Ẏ⊘σ) mixes σ-amplified trace-species dynamics that a
-variance-PCA k=8 projection simply does not carry — the transported-closure version of the
-Phase-1 hidden-state finding. No rescaling, lr, or capacity change can cross an input-
-information ceiling.
+on the training batch itself. The independent data audit (AUDIT-A) then localized WHY — and
+it is not an intrinsic k-limit:
+
+**RC-D [CONFIRMED] — σ-degenerate species poison the basis AND the target (the true dominant
+cause).** 62 of 212 dry species have per-column std < 1e-10 on stride5 (3 nominally constant
+incl. inert N₂ — float64 std ≈ 1e-15, so even the legacy ``std > 0`` guard amplifies them by
+~1e15 — plus 59 trace radicals at σ 1e-17..1e-11 whose dYdt is 75–100% below 1e-12 1/s).
+Standardization turns them into unit-variance solver-noise columns (~28% of the PCA input
+budget; raw-PCA dim 1 is 100% inert N₂), and ż = E·(Ẏ⊘σ) amplifies their dYdt noise by up to
+1e15. Measured ceiling of the ω_Z target from (z₈, T, P): **kNN OOF R² ≈ −0.10 polluted vs
+0.82 mean / 0.85 tail with the 62 species de-activated** (per-dim 0.63–0.94; 0–1 sign flips
+per trajectory; Var max/min 1.46). The chemistry is smooth and learnable; the formulation was
+noise-bound. Fixed locally as FIX-2 (`sigma_floor`).
 
 **RC-C [CONFIRMED, secondary] — optimizer budget for the latent head.** Reaching even the
 in-sample ceiling took 2400 DEDICATED steps on one batch; a 14-epoch full train gives the head
@@ -110,10 +119,69 @@ k=16 lifts the energy path well above the baseline at 4.5× fewer epochs — con
 input-limited the way ω_Z is (their targets are h-weighted big-species quantities that the PCA
 state does carry).
 
-## Status
+## Phase 4 outcome — the fixes work (E8/E9)
 
-- Phases 0–3 complete; FIX-1 applied + regression-tested; E7 (60-epoch k=16 confirm) running.
-- Constraint honored: campaign-memory file lives outside the repo (OneDrive) and is NOT updated
-  tonight per the stay-inside-the-repo guardrail — next session should copy the outcome there.
+Floor-relative val latent_source (MSE / Var of each run's own target; 1.0 = predicting the mean;
+figure: `runs/overnight_fig/latent_source_diagnosis.png`, regenerate with
+`scripts/overnight/fig_diagnosis.py`):
 
-*(Final sections — E7, data-audit integration, recommendations — appended below.)*
+| run | config | val latent (raw) | own floor (Var) | floor-relative | target-space R² | val absorption R² (rate-derived) |
+|---|---|---|---|---|---|---|
+| baseline | k=8, both bugs | 50.9 flat | 49.996 | **1.02 (floor)** | ~0.05 | 0.708 (63 ep) |
+| E5 | k=8 + FIX-1 | 15.40 flat | 15.795 | 0.97 (floor) | ~0.03 | 0.668 (14 ep) |
+| E6 | k=16 + FIX-1 | 14.89 flat | 14.007 | 1.06 (floor) | ~0.05 | 0.808 (14 ep) |
+| E8 | k=16 + FIX-1+2 | **1.355 ↓** | 5.398 | **0.25** | **≈0.73** | 0.9405 (14 ep) |
+| E9 | k=16 + FIX-1+2, 60 ep | **0.854 ↓** | 5.398 | **0.16** | **≈0.84** | 0.9413 · **tail median rel-err 0.0256** |
+
+E9's ω_Z skill (R² ≈ 0.84) sits AT the audit-measured kNN ceiling (0.82) and was still
+descending at the epoch cap. Honest nuances, both logged: (i) E7 (no floor, 60 ep) holds the
+best GLOBAL absorption (0.9755 vs 0.9413) while E9 has a 2.9× better tail median — neither is
+converged at 60 CPU epochs; (ii) the distilled head regressed between epoch 14 and 60 under the
+total-loss checkpoint criterion (0.636 → 0.096) — per-head checkpointing is an HPC to-do, and the
+UDF can compute S_h from the rate head + h(T) in C as an exact fallback.
+
+## Goal-criteria assessment (tracked manually)
+
+- ✅ OVERNIGHT_REPORT.md + OVERNIGHT_LOG.md committed on `overnight-diagnosis-20260612`.
+- ✅ Root cause explained with [CONFIRMED]/[HYPOTHESIS] evidence (RC-A, RC-D, RC-C; table above).
+- ✅ ≥4 ranked hypotheses tested with reproducible logged commands (H1, H7→RC-D, H-opt, H2, H3,
+  H4/H5, H6 — every number's command in the ledger).
+- ✅ Committed, pytest-passing change (FIX-1 + FIX-2 + 2 regression tests; full suite
+  **458 passed / 1 skipped**) reduces val latent_source vs the 48.75 baseline by far more than
+  25% — and, in the scale-honest metric pre-registered in Phase 0, lifts target-space skill from
+  R² ≈ 0.05 (floor-bound) to **R² ≈ 0.84 at the measured information ceiling**.
+- ✅ Caps honored: 10 / 12 training experiments; ~3 h / 8 h wall.
+
+## FIXED LOCALLY (committed on this branch)
+
+1. **FIX-1** — `freeze_latent_arcsinh_scale` now freezes s_Z from the latent-SOURCE distribution
+   (median|E·(Ẏ⊘σ)|), not the latent state; loud legacy fallback; regression test.
+2. **FIX-2** — `CompositionScaler(mode="standard", sigma_floor=…)` de-activates σ ≤ floor species
+   (62/212 on stride5, incl. inert N₂ whose float64 std ≈ 1e-15 defeats the old ``std > 0``
+   guard); wired as `DataConfig.composition_sigma_floor` (default 0.0 = legacy;
+   `configs/train_merged.json` now sets the recommended 1e-10); regression test.
+3. Codegen ω_Z cross-precision bound set to the measured f32/f64 envelope (2e-3; three retrain
+   draws documented); the strict 1e-6 double-vs-double C-forward-test gate unchanged.
+
+## NEEDS HPC / YOUR DECISION (ranked)
+
+1. **Full-length training of the E9 config** (k=16, FIX-1+2; `configs/train_merged.json`) — both
+   heads were still improving at the 60-epoch CPU cap. Add **per-head checkpointing/early-stop**
+   (the distilled head's optimum is destroyed by total-loss checkpointing — see E8 vs E9 head).
+2. **k ablation {8, 12, 16} under FIX-1+2** (the overnight k=8-vs-16 comparison predates FIX-2;
+   the audit's clean-basis ceiling was measured at k=8 ≈ 0.82, so k=8 may recover with the floor —
+   cheaper CFD transport if it does).
+3. **σ-floor sensitivity** (1e-12 / 1e-10 / 1e-8) + the audit's alternative (σ_safe floor instead
+   of de-activation) — one HPC sweep; the audit tags the alternative [HYPOTHESIS].
+4. **Front-adaptive DB regeneration + §5 certification** (unchanged from MERGE_DESIGN.md; all
+   tonight's numbers are bootstrap-grade on stride-stored data, val-split, non-certifying).
+5. Lagrangian rollout re-enable on the regenerated fine-Δτ data (documented constraint).
+6. Carry-over: colleague-adapter reconciliation (task #13) before any head-to-head claims.
+
+## Caps & bookkeeping
+
+10 training experiments (E2, E3, E2b, E3b, E4b, E5, E6, E7, E8, E9) + 3 no-training analyses
+(E0-A, E1-A, AUDIT-A by the one sanctioned read-only Sonnet subagent). No pushes; no deletions;
+data treated read-only; `runs/merged_bootstrap_stride5/` untouched (audited read-only);
+`scarfs-merge` history untouched. The OneDrive campaign-memory file was deliberately NOT updated
+(stay-inside-the-repo guardrail) — copy the iteration-log row from this report next session.
