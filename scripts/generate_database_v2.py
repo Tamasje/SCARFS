@@ -220,12 +220,13 @@ def run_tier(args) -> int:
         print("NOTE: material negative absorption found -> E-c escape hatch applies "
               "(switch the energy head to shifted-softplus); see MERGE_DESIGN.md.")
 
-    grid_p95 = [a.get("grid_p95_jump_frac") for a in audits if "grid_p95_jump_frac" in a]
-    if grid_p95:
-        gmax = max(grid_p95)
-        print(f"solve-grid resolution: worst per-case single-step p95 jump = {gmax:.3f} of peak "
-              f"(policy {settings.storage.max_frac_jump}); if this exceeds the policy, "
-              f"raise --n-points by ~{max(1.0, gmax / settings.storage.max_frac_jump):.1f}x")
+    grid_max = [a.get("grid_max_jump_frac") for a in audits if "grid_max_jump_frac" in a]
+    if grid_max:
+        gmax = max(grid_max)
+        pol = settings.storage.max_frac_jump
+        print(f"solve-grid resolution: worst per-case STEEPEST single-step jump = {gmax:.3f} of "
+              f"peak (policy {pol}); the steepest solver step is the smallest achievable stored "
+              f"jump, so raise --n-points by ~{max(1.0, gmax / pol):.1f}x to bring it within policy")
     if gate_a_worker is not None:
         print("\nGATE A (in-worker, post-solve context):")
         _print_gate_a(gate_a_worker)
@@ -257,9 +258,9 @@ def run_gates_on(parquet_path: Path, args) -> int:
     print(f"GATE C (front resolution): policy-jump p95 {c['p95_jump_frac']:.3f} "
           f"<= {c['threshold']:.3f} -> {'PASS' if c['passed'] else 'FAIL'} "
           f"[{c['n_policy_jumps']} policy jumps]")
-    print(f"        grid-limited single-step p95 {c['grid_p95_jump_frac']:.3f} of peak "
-          f"({c['n_grid_jumps']} jumps) -> recommended --n-points factor "
-          f"~{max(1.0, c['grid_resolution_factor']):.1f}x if above policy")
+    print(f"        grid-limited single-step: p95 {c['grid_p95_jump_frac']:.3f} / "
+          f"max {c['grid_max_jump_frac']:.3f} of peak ({c['n_grid_jumps']} jumps) -> "
+          f"raise --n-points ~{max(1.0, c['grid_resolution_factor']):.1f}x if max exceeds policy")
     ok = a["passed"] and c["passed"]
     print(f"GATES: {'ALL PASS' if ok else 'FAILED — do not run production tiers'}")
     return 0 if ok else 2
@@ -279,6 +280,8 @@ def _print_gate_a(a: dict) -> None:
     print(f"  raw nonzero frac (row 0): {a['raw_nonzero_frac_row0']:.3f}   "
           f"double-call max |diff|: {a['double_call_max_abs_diff']:.3e} "
           f"(>0 => NetRates_C is stateful)")
+    print(f"  worst entry |stored|/species-peak: {a.get('worst_stored_over_species_peak', float('nan')):.2e}  "
+          f"(≪1 => the max is a near-zero-crossing artifact, not an ordering/units error)")
     if a.get("per_species_worst"):
         worst = ", ".join(f"{s}={v:.2e}" for s, v in a["per_species_worst"])
         print(f"  worst species: {worst}")

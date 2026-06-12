@@ -313,6 +313,9 @@ def test_gate_front_resolution_separates_grid_limited_jumps():
     # assert: grid-limited 10% steps are reported separately, not in the policy population
     assert res["n_grid_jumps"] == 3 and res["n_policy_jumps"] == 5
     assert res["grid_p95_jump_frac"] == pytest.approx(0.10, abs=1e-9)
+    assert res["grid_max_jump_frac"] == pytest.approx(0.10, abs=1e-9)
+    # recommendation uses the STEEPEST single step (max), the binding grid constraint
+    assert res["grid_resolution_factor"] == pytest.approx(0.10 / 0.7, rel=1e-6)
     assert res["passed"]
     assert strict["n_policy_jumps"] == 8, "without the index column all jumps count (strict)"
 
@@ -360,3 +363,34 @@ def test_dydt_and_energy_units_are_mass_conserving():
     assert abs(dYdt_correct.sum()) < 1e-9 * np.abs(dYdt_correct).sum(), "corrected dYdt must close"
     assert abs(dYdt_buggy.sum()) > 1e-2 * np.abs(dYdt_buggy).sum(), "buggy dYdt should NOT close"
     np.testing.assert_allclose(dYdt_buggy / dYdt_correct, MW, rtol=1e-9)  # exactly one extra MW
+
+
+def test_v2_default_storage_min_every_nth_is_one():
+    """REGRESSION (gate-C 0.199 finding 2026-06-12): the size cap must not throttle storage
+    through the front. v2 default min_every_nth=1 so the 3% threshold alone governs density."""
+    assert GenV2Settings().storage.min_every_nth == 1
+    assert GenV2Settings().storage.mode == "front_adaptive"
+
+
+def test_min_every_nth_one_halves_stored_jumps_on_steep_front():
+    """min_every_nth=1 lets the policy store consecutive points through a steep front, so the
+    stored-jump ceiling is ONE grid step; min_every_nth=2 forces skipping → ~2× larger jumps."""
+    from scarfs.data.config import StorageConfig
+    from scarfs.data.generate import select_storage_indices
+
+    # arrange: a steep ramp where each solver step is ~8% of peak (above the 3% policy)
+    n = 60
+    s_e = np.concatenate([np.linspace(0, 1.0, 13), np.full(n - 13, 1.0)]) * 1e8  # 8.3%/step front
+
+    def max_stored_jump(min_gap):
+        idx = select_storage_indices(s_e, StorageConfig(mode="front_adaptive",
+                                                        max_frac_jump=0.03, min_every_nth=min_gap))
+        a = s_e[idx]; peak = np.abs(s_e).max()
+        return np.abs(np.diff(a)).max() / peak
+
+    # act
+    j1 = max_stored_jump(1)
+    j2 = max_stored_jump(2)
+    # assert: with min_gap=1 the worst stored jump ≈ one grid step (~8%); min_gap=2 ≈ doubles it
+    assert j1 < 0.11, f"min_gap=1 should cap at ~1 grid step, got {j1:.3f}"
+    assert j2 > 1.6 * j1, f"min_gap=2 should roughly double the worst jump: {j2:.3f} vs {j1:.3f}"
