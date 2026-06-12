@@ -130,24 +130,35 @@ def run_tier(args) -> int:
         json.dumps(manifest, indent=2, default=str), encoding="utf-8")
 
     task_q: Queue = Queue()
-    ready_q: Queue = Queue()
     status_q: Queue = Queue()
     n_workers = max(1, int(args.n_cpu))
     settings_doc = {**settings.__dict__, "storage": settings.storage.__dict__,
                     "gate_a_in_worker": args.tier == "smoke"}
-    workers = [Process(target=worker_loop,
-                       args=(i, task_q, ready_q, status_q, dll_path, mech_path,
-                             str(base_dir), str(scratch), settings_doc))
-               for i in range(n_workers)]
-    for w in workers:
+    # SEQUENTIAL worker startup with a per-worker READY handshake (the colleague's proven
+    # pattern, Database_Generation_MB.py: "sequential worker startup handshake — avoids DLL
+    # logfile races"). CRACKSIM's Initialise_CRACKSIM writes to a shared init log; if N
+    # workers initialise the DLL simultaneously they race on it and crash. Per-worker FORT45
+    # redirection alone is NOT sufficient — the init must also be serialised. Each worker gets
+    # its OWN ready queue; we block on it before starting the next worker. Startup cost is
+    # negligible against a multi-thousand-case run.
+    workers = []
+    ready_queues = []
+    for i in range(n_workers):
+        rq: Queue = Queue(maxsize=1)
+        w = Process(target=worker_loop,
+                    args=(i, task_q, rq, status_q, dll_path, mech_path,
+                          str(base_dir), str(scratch), settings_doc),
+                    daemon=False)
         w.start()
-    ready = [ready_q.get() for _ in workers]
-    bad = [r for r in ready if r != "READY"]
-    if bad:
-        print(f"ERROR: worker init failed: {bad}", file=sys.stderr)
-        for _ in workers:
-            task_q.put(None)
-        return 1
+        msg = rq.get()  # block until THIS worker has finished CRACKSIM init
+        if msg != "READY":
+            print(f"ERROR: worker {i} init failed: {msg}", file=sys.stderr)
+            for done_w in workers:
+                task_q.put(None)
+            return 1
+        print(f"[w{i}] READY", flush=True)
+        workers.append(w)
+        ready_queues.append(rq)
 
     t0 = time.time()
     for c in runner_cases:
