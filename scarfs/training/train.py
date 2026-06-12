@@ -55,6 +55,17 @@ from .datamodule import DataBundle, prepare_data, resolve_species, enthalpy_awar
 # Helpers shared by all paths
 # ---------------------------------------------------------------------------
 
+def _select_device() -> str:
+    """Pick the best available torch device: cuda > mps (Apple GPU) > cpu."""
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def build_model(cfg: TrainConfig, spec: FeatureSpec):
     """Instantiate the configured surrogate (PyTorch)."""
     if cfg.model.kind == "reduced":
@@ -525,7 +536,7 @@ def train(cfg: TrainConfig) -> dict:
         return _train_merged(cfg, df, schema)
 
     bundle = prepare_data(cfg.data, df, schema)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = _select_device()
     model = build_model(cfg, bundle.spec).to(device)
     optimiser = torch.optim.AdamW(model.parameters(), lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
 
@@ -647,7 +658,7 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
     n_in = len(bundle.spec.input_species)
     X_comp_train = bundle.X_train[:, :n_in]  # standardized composition block
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = _select_device()
     model = build_model(cfg, bundle.spec).to(device)
 
     # PCA-init encoder on the standardized composition (latent arcsinh scales are frozen
@@ -720,12 +731,13 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
     # differentiable inverse of the ArcsinhScaler: scaled head output -> physical mass rates.
     # x = sinh(z·σ_std + μ_std)·s ; the pre-sinh clamp at ±30 (sinh(30) ≈ 5e12 — far beyond any
     # physical rate) is a pure overflow guard, not a learning bound.
-    _r_mu = _torch.as_tensor(rate_scaler._std.mean_, dtype=_torch.float32)
-    _r_sig = _torch.as_tensor(rate_scaler._std.scale_, dtype=_torch.float32)
-    _r_s = _torch.as_tensor(rate_scaler.scale_, dtype=_torch.float32)
+    _r_mu = _torch.as_tensor(rate_scaler._std.mean_, dtype=_torch.float32, device=device)
+    _r_sig = _torch.as_tensor(rate_scaler._std.scale_, dtype=_torch.float32, device=device)
+    _r_s = _torch.as_tensor(rate_scaler.scale_, dtype=_torch.float32, device=device)
 
     def _rates_to_physical(rates_scaled):
-        return _torch.sinh((rates_scaled * _r_sig + _r_mu).clamp(-30.0, 30.0)) * _r_s
+        mu, sig, s = (t.to(rates_scaled.device) for t in (_r_mu, _r_sig, _r_s))
+        return _torch.sinh((rates_scaled * sig + mu).clamp(-30.0, 30.0)) * s
 
     # Lagrangian pairs
     if cfg.loss.rollout_mode == "lagrangian":
@@ -782,6 +794,74 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
     if best_state is not None:
         model.load_state_dict(best_state)
 
+    # -- distilled-head fine-tune (trunk frozen) ------------------------------------------
+    # The main-loop checkpoint is selected on the TOTAL val loss, which the latent term
+    # dominates; that criterion discards the head's own optimum (overnight E8 vs E9: head
+    # R² 0.636 @ 14 ep → 0.096 @ 60 ep). Re-tune ONLY model.energy_net against the frozen
+    # rate-derived absorption (distill) + DB target (direct), checkpointed on the val head
+    # loss. The trunk is computed under no_grad, so gradients reach head params only.
+    head_ft: dict[str, Any] = {}
+    if cfg.optim.head_finetune_epochs > 0 and hasattr(model, "energy_net"):
+        from . import losses as L
+
+        for p in model.parameters():
+            p.requires_grad_(False)
+        for p in model.energy_net.parameters():
+            p.requires_grad_(True)
+        head_opt = torch.optim.AdamW(
+            model.energy_net.parameters(), lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay
+        )
+
+        def _head_pass(X: np.ndarray, absorption: np.ndarray, weights: np.ndarray | None,
+                       train_mode: bool) -> float:
+            model.train(train_mode)
+            Xt = _torch.as_tensor(X, dtype=_torch.float32, device=device)
+            At = _torch.as_tensor(absorption, dtype=_torch.float32, device=device)
+            Wt = (_torch.as_tensor(weights, dtype=_torch.float32, device=device)
+                  if weights is not None else None)
+            order = np.random.default_rng(cfg.data.seed).permutation(len(X)) if train_mode \
+                else np.arange(len(X))
+            total, count = 0.0, 0
+            for start in range(0, len(order), cfg.optim.batch_size):
+                sel = order[start: start + cfg.optim.batch_size]
+                xb = Xt[sel]
+                with _torch.no_grad():
+                    z = model.encode(xb[:, :n_in])
+                    y_rec = model.decode(z, xb[:, n_in:])
+                    z_proj = model.encoder(y_rec)
+                    rates_phys = _rates_to_physical(model.rates_from_latent(z_proj, xb[:, n_in:]))
+                    abs_rates = _absorption_from_rates(rates_phys, xb[:, n_in:])
+                abs_head = model.absorption(z_proj, xb[:, n_in:]).squeeze(-1)
+                wb = Wt[sel] if Wt is not None else None
+                loss = (
+                    L.energy_distill_loss(abs_head, abs_rates, energy_scale, wb)
+                    + L.energy_direct_loss(abs_head, At[sel], energy_scale, wb)
+                )
+                if train_mode:
+                    head_opt.zero_grad()
+                    loss.backward()
+                    _torch.nn.utils.clip_grad_norm_(model.energy_net.parameters(), cfg.optim.grad_clip)
+                    head_opt.step()
+                total += float(loss.detach()) * len(sel)
+                count += len(sel)
+            return total / max(count, 1)
+
+        best_h, best_h_state, h_hist = float("inf"), None, []
+        for he in range(cfg.optim.head_finetune_epochs):
+            tr_h = _head_pass(bundle.X_train, absorption_train, bundle.w_train, True)
+            va_h = (_head_pass(bundle.X_val, absorption_val, None, False)
+                    if absorption_val is not None and len(bundle.X_val) else tr_h)
+            h_hist.append({"epoch": he, "train": tr_h, "val": va_h})
+            if va_h < best_h:
+                best_h = va_h
+                best_h_state = {k: v.detach().cpu().clone()
+                                for k, v in model.energy_net.state_dict().items()}
+        if best_h_state is not None:
+            model.energy_net.load_state_dict(best_h_state)
+        for p in model.parameters():
+            p.requires_grad_(True)
+        head_ft = {"epochs_run": len(h_hist), "best_val_head_loss": best_h, "history": h_hist}
+
     # val-set absorption metrics: both energy paths (rate-derived tie and distilled head)
     abs_metrics: dict[str, Any] = {}
     if absorption_val is not None and len(bundle.X_val):
@@ -816,6 +896,7 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
             "test": bundle.test_case_ids or [],
         },
         "absorption_metrics_val": abs_metrics,
+        "head_finetune": head_ft,
         "thermo_missing_species": list(thermo_dry.missing),
         "n_absorption_clipped_train": int(n_abs_clipped),
     }

@@ -102,6 +102,12 @@ class OptimConfig:
     batch_size: int = 4096
     grad_clip: float = 1.0
     patience: int = 15
+    #: Merged model only: after the main loop, re-tune the distilled absorption head alone
+    #: (trunk + rate/latent heads frozen) for this many epochs, checkpointed on the val
+    #: head loss. The main loop's best checkpoint is selected on the TOTAL val loss, which
+    #: the latent term dominates — that criterion measurably discards the head's own
+    #: optimum (overnight diagnosis E8 vs E9: head R² 0.636 @ 14 ep → 0.096 @ 60 ep).
+    head_finetune_epochs: int = 0
 
 
 @dataclass

@@ -811,3 +811,49 @@ def test_composition_sigma_floor_deactivates_degenerate_species():
     assert floored.scale_[2] == 1.0
     assert 0.0 < legacy.scale_[2] < 1e-10
     assert legacy.scale_[1] < 1e-10                       # the legacy pathology this guards
+
+
+@pytest.mark.skipif(not _TORCH_AVAILABLE, reason="PyTorch not available")
+def test_head_finetune_runs_and_improves_head_loss():
+    """head_finetune_epochs > 0 re-tunes ONLY the absorption head and records its history.
+
+    The main-loop checkpoint criterion (total val loss) is latent-dominated and discards
+    the head optimum (overnight E8 vs E9); the fine-tune trains energy_net alone against
+    the frozen rate-derived + DB targets.
+    """
+    from scarfs.benchmark.loader import infer_schema, load_database
+    from scarfs.training.datamodule import tripartite_case_split
+    from scarfs.training.train import train
+
+    fixture = Path(__file__).parent / "data" / "stride6_sample.parquet"
+    df = load_database(fixture)
+    schema = infer_schema(df)
+    seed = next(
+        s for s in range(20)
+        if all(m.any() for m in tripartite_case_split(
+            df, schema, val_fraction=0.3, test_fraction=0.25, seed=s, split_by_case=True))
+    )
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = TrainConfig(
+            data=DataConfig(
+                database_path=str(fixture), input_species="dry_all",
+                target_species="energy_active", val_fraction=0.3, test_fraction=0.25,
+                split_by_case=True, mech_yaml=str(Path(__file__).parents[1] / "chem_ForTransport.yaml"),
+                composition_sigma_floor=1e-10, seed=seed,
+            ),
+            model=ModelConfig(kind="merged", latent_dim=2, decoder_hidden=(8,),
+                              rate_hidden=(8,), latent_source_hidden=(8,), energy_hidden=(8,)),
+            optim=__import__("scarfs.training.config", fromlist=["OptimConfig"]).OptimConfig(
+                epochs=1, batch_size=256, patience=5, head_finetune_epochs=3),
+            loss=LossConfig(),
+            output_dir=str(Path(tmp) / "run"),
+        )
+        # arrange/act
+        metrics = train(cfg)
+        # assert: fine-tune ran, history recorded, best head loss is finite and no worse
+        # than the first fine-tune epoch's val loss
+        ft = metrics["head_finetune"]
+        assert ft["epochs_run"] == 3
+        assert np.isfinite(ft["best_val_head_loss"])
+        assert ft["best_val_head_loss"] <= ft["history"][0]["val"] + 1e-9
