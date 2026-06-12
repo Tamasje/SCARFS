@@ -333,6 +333,22 @@ class GenV2Settings:
     generator_version: str = "v2.0"
 
 
+def settings_from_doc(doc: dict) -> "GenV2Settings":
+    """Rebuild GenV2Settings from a worker payload dict, ignoring transport-only keys.
+
+    The orchestrator's ``settings_doc`` may carry extra flags for the worker loop itself
+    (e.g. ``gate_a_in_worker``); the dataclass must only receive its own fields —
+    regression for the 2026-06-12 Windows smoke crash (TypeError on unknown kwarg).
+    """
+    from dataclasses import fields as _fields
+
+    valid = {f.name for f in _fields(GenV2Settings)}
+    clean = {k: v for k, v in doc.items() if k in valid}
+    if isinstance(clean.get("storage"), dict):
+        clean["storage"] = StorageConfig(**clean["storage"])
+    return GenV2Settings(**clean)
+
+
 #: Per-regime FULL-tier case counts (the approved spec, ~20.5k cases).
 FULL_TIER_COUNTS = {
     "body": 12000, "inlet_seed": 2500, "high_T": 2500, "tail": 2000, "deep_conversion": 1500,

@@ -55,10 +55,7 @@ def worker_loop(worker_id: int, task_q: Queue, ready_q: Queue, status_q: Queue,
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    from scarfs.data.config import StorageConfig
-
-    settings = GenV2Settings(**{**settings_doc,
-                                "storage": StorageConfig(**settings_doc["storage"])})
+    settings = g2.settings_from_doc(settings_doc)
     g2.init_worker_cracksim(dll_path, mech_path, Path(base_dir), Path(scratch_root), ready_q)
     scratch = Path(scratch_root)
     last_df = None

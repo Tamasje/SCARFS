@@ -315,3 +315,22 @@ def test_gate_front_resolution_separates_grid_limited_jumps():
     assert res["grid_p95_jump_frac"] == pytest.approx(0.10, abs=1e-9)
     assert res["passed"]
     assert strict["n_policy_jumps"] == 8, "without the index column all jumps count (strict)"
+
+
+def test_settings_from_doc_ignores_transport_flags():
+    """REGRESSION (Windows smoke crash 2026-06-12): the worker payload carries loop-only
+    flags (gate_a_in_worker) alongside GenV2Settings fields; reconstruction must filter to
+    dataclass fields and rebuild the nested StorageConfig."""
+    from scarfs.data.generation_v2 import settings_from_doc
+
+    # arrange: exactly what run_tier ships to workers
+    base = GenV2Settings(n_points=321, solver_rtol=1e-8)
+    doc = {**base.__dict__, "storage": base.storage.__dict__, "gate_a_in_worker": True}
+    # act
+    rebuilt = settings_from_doc(doc)
+    # assert
+    assert rebuilt.n_points == 321
+    assert rebuilt.solver_rtol == pytest.approx(1e-8)
+    assert rebuilt.storage.mode == base.storage.mode
+    assert rebuilt.storage.max_frac_jump == pytest.approx(base.storage.max_frac_jump)
+    assert not hasattr(rebuilt, "gate_a_in_worker")
