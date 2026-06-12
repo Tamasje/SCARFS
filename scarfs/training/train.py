@@ -633,7 +633,11 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
     cfg2.data.target_species = list(energy_active)
     bundle = prepare_data(
         cfg2.data, df, schema,
-        composition_kwargs={"log": False, "mode": "standard"},
+        composition_kwargs={
+            "log": False,
+            "mode": "standard",
+            "sigma_floor": cfg.data.composition_sigma_floor,
+        },
         prefer_dydt=True,
     )
     df_train = df.iloc[bundle.train_indices].reset_index(drop=True)

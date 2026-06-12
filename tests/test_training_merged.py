@@ -778,3 +778,36 @@ def test_latent_arcsinh_scale_uses_source_not_state():
     np.testing.assert_allclose(s_source, np.median(np.abs(z_dot), axis=0), rtol=1e-12)
     assert np.all(s_source > 1e3), f"source scale should be O(1e4), got {s_source}"
     assert np.all(s_state < 10.0), f"state fallback should be O(1), got {s_state}"
+
+
+def test_composition_sigma_floor_deactivates_degenerate_species():
+    """std <= sigma_floor species get scale_=1.0 (no noise standardisation, no zdot spikes).
+
+    Overnight diagnosis 2026-06-12: 62/212 stride5 species have std < 1e-10; standardising
+    them fed unit-variance solver noise to the PCA basis and amplified dYdt noise by up to
+    1e15 in the latent-source target. The floor de-activates them; default 0.0 preserves
+    the legacy std>0 behaviour exactly.
+    """
+    from scarfs.models.common import CompositionScaler
+
+    # arrange: one healthy species, one trace species with std 1e-15, one exact constant
+    rng = np.random.default_rng(11)
+    n = 200
+    y = np.column_stack([
+        0.5 + 0.1 * rng.standard_normal(n),          # healthy: std ~0.1
+        1e-15 * rng.standard_normal(n) + 1e-12,      # degenerate: std ~1e-15
+        np.full(n, 0.3),                             # exact constant: std 0
+    ])
+
+    # act
+    floored = CompositionScaler(log=False, mode="standard", sigma_floor=1e-10).fit(y)
+    legacy = CompositionScaler(log=False, mode="standard").fit(y)
+
+    # assert: floor de-activates the degenerate column; legacy keeps amplifying it
+    assert floored.scale_[1] == 1.0, f"degenerate column not floored: {floored.scale_}"
+    assert floored.scale_[0] == legacy.scale_[0]          # healthy column unchanged
+    # a nominally CONSTANT column has float64 std ~1e-15, not exactly 0 — the legacy
+    # ``std > 0`` guard does NOT protect it (it gets ~1e15 amplification); the floor does.
+    assert floored.scale_[2] == 1.0
+    assert 0.0 < legacy.scale_[2] < 1e-10
+    assert legacy.scale_[1] < 1e-10                       # the legacy pathology this guards

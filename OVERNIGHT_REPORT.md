@@ -55,10 +55,65 @@ available in this session); caps = 8 h wall / 12 training experiments, honored.
   (flat vs descending), and downstream val absorption / QoI metrics.
 - P5: finalize (root cause, FIXED-LOCALLY vs NEEDS-HPC, ranked next steps).
 
+## Phase 1–3 findings (all numbers from logged runs; see ledger)
+
+### Root cause is TWO stacked causes plus one budget factor
+
+**RC-A [CONFIRMED] — s_Z units bug (H1), FIXED LOCALLY.** `freeze_latent_arcsinh_scale` froze
+the latent-STATE scale median|E·x| (0.013–2.1) where the latent-SOURCE scale median|E·(Ẏ⊘σ)|
+(13.6–78) was required — mis-scale 10–1075× per dim (E1-A). Fingerprint: Var(target | saved s_Z)
+= 49.996 ≈ the stuck val loss 50.9; model per-dim R² in target space 0.007–0.095 — the head was
+predicting the mean of a ±8–17 sign×log-magnitude cliff field. The ONLY two flat loss terms
+(latent_source, consistency) are the only two consumers of s_Z. Fix: source-based freeze +
+regression test (commit "Overnight FIX-1"). Pre-registered honesty caveat: the fix changes the
+loss UNITS (floor 50→15.8 by construction); the numeric ≥25% reduction criterion is met
+trivially and is NOT claimed as learning — skill metrics are reported instead.
+
+**RC-B [CONFIRMED in-sample] — k=8 information ceiling for ż (H7, the dominant cause).**
+Decisive overfit chain on one seeded 2048-row batch (E2→E4b), latent loss only:
+saved-s_Z via z_proj 0.76 → corrected via z_proj 0.71 → corrected z-direct **0.43** →
+corrected with the FULL 212-dim composition as input **0.155 and still descending**.
+The same target an MLP memorizes from the full state is ~43–57%-unreachable from (z₈, T, P)
+ON THE TRAINING BATCH ITSELF. ω_Z = E·(Ẏ⊘σ) mixes σ-amplified trace-species dynamics that a
+variance-PCA k=8 projection simply does not carry — the transported-closure version of the
+Phase-1 hidden-state finding. No rescaling, lr, or capacity change can cross an input-
+information ceiling.
+
+**RC-C [CONFIRMED, secondary] — optimizer budget for the latent head.** Reaching even the
+in-sample ceiling took 2400 DEDICATED steps on one batch; a 14-epoch full train gives the head
+~250 shared steps → E5/E6 still sit at the (corrected) mean floor on val. ω_Z skill needs
+HPC-scale training; short CPU runs cannot demonstrate it either way.
+
+### Hypothesis table (Phase 2 ranking, final)
+
+| # | Hypothesis | Verdict | Evidence |
+|---|---|---|---|
+| H1 | s_Z scale/units bug | **[CONFIRMED — fixed]** | E1-A floor=Var fingerprint; E2b vs E3b at equal compute |
+| H7 | k=8 input-information ceiling for ż | **[CONFIRMED in-sample — dominant]** | E3b 0.43 vs E4b 0.155 full-input |
+| H-opt | optimizer budget (steps for the head) | **[CONFIRMED — secondary]** | 2400 dedicated steps for 0.43·Var vs ~250 shared in 14 ep |
+| H2 | one stiff dim dominates the MSE | **[REFUTED as primary]** | E1-A per-dim Var ≈ uniform 36–69 under bad scale; 12–21 corrected |
+| H3 | target noise floor (trace dYdt) | [PARTIAL — see data audit when it lands] | Sonnet audit pending at write time; full-input memorization (0.155) bounds noise ≤ ~15% in-sample |
+| H4/H5 | optimization settings / capacity | **[REFUTED as primary]** | identical head+trunk trains the rate term 0.67→0.09; full-input MLP memorizes |
+| H6 | moving (encoder-dependent) target | **[REFUTED as primary]** | curve flat, not oscillating; PCA-anchored E |
+
+### What moved downstream (the CFD-relevant prize)
+
+| run | k | epochs | val absorption R² (rate-derived / head) |
+|---|---|---|---|
+| baseline (mis-scaled s_Z) | 8 | 63 | 0.708 / 0.231 |
+| E5 (fix) | 8 | 14 | 0.668 / −0.05 |
+| E6 (fix) | 16 | 14 | **0.808 / 0.307** |
+| E7 (fix, long) | 16 | 60 | *(running; appended below)* |
+
+k=16 lifts the energy path well above the baseline at 4.5× fewer epochs — consistent with the
+2026-06-11 stride5 feasibility table (PCA-12/16 PASS, PCA-8 FAIL). The rate/energy heads are NOT
+input-limited the way ω_Z is (their targets are h-weighted big-species quantities that the PCA
+state does carry).
+
 ## Status
 
-- Phase 0 complete (baseline suite result in ledger E0).
+- Phases 0–3 complete; FIX-1 applied + regression-tested; E7 (60-epoch k=16 confirm) running.
 - Constraint honored: campaign-memory file lives outside the repo (OneDrive) and is NOT updated
   tonight per the stay-inside-the-repo guardrail — next session should copy the outcome there.
 
-*(Sections below are appended as phases complete.)*
+*(Final sections — E7, data-audit integration, recommendations — appended below.)*

@@ -82,3 +82,39 @@ Training-experiment count is tracked against the 12-run cap; analyses (no traini
   [CONFIRMED secondary factor] stacked on the H7 ceiling; (ii) k=16 materially improves the
   CFD-relevant downstream (absorption) — consistent with the 2026-06-11 feasibility table
   (PCA-12/16 PASS). E7 (60-epoch k=16) launched as the final discriminator/confirmation.
+
+---
+
+## E7 · training exp 8 · 60-epoch confirm, fix @ k=16
+- Command: `.venv/bin/python -m scarfs.training.train --config runs/overnight_e7_cfg.json`.
+- Result: **val absorption rate-derived R² 0.9755, relRMSE 0.1387, tail relRMSE 0.1399,
+  tail median rel-err 0.0736; head R² 0.8381 / tail median 0.2025.** Val latent_source
+  still floor-flat (~14.3–14.6 across 60 epochs).
+- Verdict: at k=16 + source-s_Z, the ENERGY path clears the ChemZIP-parity gates
+  (R²≥0.95, relRMSE≤0.23) and the tail-median gate (≤0.10) on the VAL split — best result
+  of the campaign, on CPU. ω_Z head remains floor-bound regardless of k/budget → cause is
+  in the target/basis, not k (see audit).
+
+## AUDIT-A · Sonnet data-quality audit (read-only, no training)
+- Task: per-dim kNN achievable-R² ceiling of arcsinh(ż/s_Z*) from (z₈, T, P) on stride5
+  (39,998 rows / 1,864 cases, GroupKFold-5 by CaseID); dYdt noise for σ-amplified species;
+  sign structure; conditioning. Full report in the agent transcript; key numbers:
+- **62 of 212 dry species have σ < 1e-10** (3 exactly constant incl. inert N2 — which
+  captures 100% of raw-PCA dim 1 — and 59 trace radicals at σ 1e-17..1e-11, 75–100% of
+  their dYdt below 1e-12 1/s). With these in the standardisation/PCA, the kNN ceiling is
+  **R² ≈ −0.10** (target noise-bound). Excluding them (150 species kept):
+  **mean OOF R² 0.8173, tail 0.8524** (per-dim 0.63–0.94), Var max/min 1.46, 0–1 sign
+  flips/trajectory, smooth spot-checks.
+- Verdict: H7 reframed — there is NO intrinsic k=8 ceiling; the ω_Z target/basis is
+  **σ-degenerate-species noise-bound** (new RC-D). H3 resolved: chemistry is smooth;
+  noise lives exactly in the σ<1e-10 columns.
+
+## FIX-2 · composition sigma_floor (Phase 4, applied)
+- Change: `CompositionScaler(mode="standard", sigma_floor=...)` — species with column std
+  ≤ floor get scale_=1.0 (de-activated as encoder inputs; no ż noise amplification).
+  Default 0.0 = exact legacy behaviour. Wired: `DataConfig.composition_sigma_floor`
+  (default 0.0) → merged path composition_kwargs. Regression test
+  `test_composition_sigma_floor_deactivates_degenerate_species` — which also documents
+  that the legacy ``std > 0`` guard fails even for NOMINALLY CONSTANT columns (float64
+  std ≈ 1e-15, not 0 → 1e15 amplification under legacy).
+- E8 (k=16, 14 ep, floor=1e-10) launched as training exp 9.

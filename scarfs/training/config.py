@@ -65,6 +65,12 @@ class DataConfig:
     tail_weight_alpha: float = 2.0
     #: When True, load only the parquet columns needed by the configured species/targets.
     columns_projection: bool = False
+    #: Standard-mode composition sigma floor: species with per-column std <= this are
+    #: de-activated as encoder inputs (scale_=1.0) instead of standardising numerical noise,
+    #: and the latent-source target ż = E·(Ẏ⊘σ) stops amplifying their dYdt solver noise
+    #: (overnight diagnosis 2026-06-12: 62/212 stride5 species sit below 1e-10 and made the
+    #: ω_Z target noise-bound). 0.0 preserves the legacy behaviour; recommended 1e-10.
+    composition_sigma_floor: float = 0.0
 
 
 @dataclass

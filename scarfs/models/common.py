@@ -48,6 +48,16 @@ class CompositionScaler:
           with ``log=False`` for the merged model's standardised linear
           encoder contract (plan §3 / E-a).  ``mean_`` and ``scale_`` are
           accessible for the UDF exporter.
+    sigma_floor
+        Standard mode only. Species whose per-column std is ``<= sigma_floor`` get
+        ``scale_ = 1.0`` — i.e. they are de-activated as encoder inputs instead of being
+        standardised to unit-variance numerical noise. On the stride5 database, 62 of 212
+        dry species have std < 1e-10 (3 exactly constant incl. inert N2, 59 trace radicals
+        at 1e-17..1e-11): standardising them (a) feeds ~28% pure-noise columns to the PCA
+        basis and (b) amplifies dYdt solver noise by up to 1e15 in the latent-source
+        target ż = E·(Ẏ⊘σ), which made ω_Z regression noise-bound (overnight diagnosis
+        2026-06-12; the clean formulation's kNN ceiling is R²≈0.82 vs ≈−0.10 polluted).
+        Default 0.0 preserves the original ``std > 0`` behaviour exactly.
 
     Attributes
     ----------
@@ -63,6 +73,7 @@ class CompositionScaler:
         floor: float = 1e-30,
         feature_range: tuple[float, float] = (-1.0, 1.0),
         mode: str = "minmax",
+        sigma_floor: float = 0.0,
     ):
         if mode not in ("minmax", "standard"):
             raise ValueError(f"CompositionScaler mode must be 'minmax' or 'standard', got {mode!r}")
@@ -70,6 +81,7 @@ class CompositionScaler:
         self.floor = float(floor)
         self.feature_range = (float(feature_range[0]), float(feature_range[1]))
         self.mode = mode
+        self.sigma_floor = float(sigma_floor)
         self.data_min_: np.ndarray | None = None
         self.data_max_: np.ndarray | None = None
         self.mean_: np.ndarray | None = None
@@ -87,7 +99,7 @@ class CompositionScaler:
         if self.mode == "standard":
             self.mean_ = t.mean(axis=0)
             std = t.std(axis=0)
-            self.scale_ = np.where(std > 0, std, 1.0)
+            self.scale_ = np.where(std > self.sigma_floor, std, 1.0)
         else:  # minmax
             self.data_min_ = t.min(axis=0)
             self.data_max_ = t.max(axis=0)
