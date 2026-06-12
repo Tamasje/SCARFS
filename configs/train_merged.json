@@ -1,5 +1,5 @@
 {
-  "_comment": "Merged model: full dry input, energy-active targets, spectral norm, tail+enthalpy weighting. NOTE: rollout_mode=lagrangian assumes fine-dtau (front-adaptive) data; on stride-stored databases the explicit-Euler step is ill-posed for stiff latent dims - use manifold there. Certification on HPC front-adaptive DB.",
+  "_comment": "Merged model: full dry input, energy-active targets, tail+enthalpy weighting, sigma_floor 1e-10, head fine-tune. spectral_norm=false and consistency_weight=0.02 are MEASURED defaults (GPU A/B 2026-06-12: SN-on + cons 0.1 costs ~0.19 absorption R2 at k=16 and early-stops by epoch ~10; SN remains available as a CFD-stability ablation lever). rollout_mode=lagrangian assumes fine-dtau (front-adaptive) data - use manifold on stride-stored databases. Certification on HPC front-adaptive DB.",
   "data": {
     "database_path": "Database_FINAL.parquet",
     "input_species": "dry_all",
@@ -47,7 +47,7 @@
       64
     ],
     "activation": "silu",
-    "spectral_norm": true
+    "spectral_norm": false
   },
   "optim": {
     "lr": 0.001,
@@ -55,7 +55,8 @@
     "epochs": 300,
     "batch_size": 4096,
     "grad_clip": 1.0,
-    "patience": 30
+    "patience": 30,
+    "head_finetune_epochs": 40
   },
   "loss": {
     "rate_weight": 1.0,
@@ -63,7 +64,7 @@
     "energy_weight": 0.5,
     "energy_distill_weight": 0.25,
     "energy_target_weight": 0.25,
-    "consistency_weight": 0.1,
+    "consistency_weight": 0.02,
     "recon_weight": 1.0,
     "qoi_recon_weight": 0.0,
     "manifold_weight": 0.1,
