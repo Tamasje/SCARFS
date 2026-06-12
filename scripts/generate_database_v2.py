@@ -1,0 +1,300 @@
+"""v2 database generation CLI — run on the Windows machine where SA_CRACKSIM.dll loads.
+
+Tiers (smoke ⊂ pilot ⊂ full are prefixes of the same Sobol streams; test is independent):
+
+    python scripts/generate_database_v2.py --tier smoke            # ~10 cases, minutes; auto-gates
+    python scripts/generate_database_v2.py --tier pilot            # ~1.2k cases — train-subset proof
+    python scripts/generate_database_v2.py --tier full             # ~20.5k cases
+    python scripts/generate_database_v2.py --tier test             # certification set (indep. stream)
+    python scripts/generate_database_v2.py --off-manifold 1000000 --source out_v2/pilot.parquet
+    python scripts/generate_database_v2.py --gates --reference <stride5-or-v2 parquet>
+
+Outputs under --out (default out_v2/): {tier}.parquet, {tier}_audits.json, {tier}_manifest.json,
+scratch/case_*.parquet (atomic per-case commits; reruns with --skip-existing resume).
+See RUNBOOK_DBGEN_WINDOWS.md for the full procedure.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+import warnings
+from multiprocessing import Process, Queue, set_start_method
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO))
+
+import numpy as np
+
+from scarfs.data import generation_v2 as g2
+from scarfs.data.generate import finalize_flow
+from scarfs.data.generation_v2 import GenV2Settings
+
+
+def _ensure_mechanism(base_dir: Path) -> str:
+    """Build chem.yaml from chem.inp/transport via ck2yaml if absent (ported bootstrap)."""
+    chem_yaml = base_dir / "chem.yaml"
+    if not chem_yaml.exists():
+        import subprocess
+
+        with (base_dir / "C2KYAML_log.txt").open("w", encoding="utf-8") as log:
+            subprocess.run(
+                ["ck2yaml", f"--input={base_dir / 'chem.inp'}",
+                 f"--transport={base_dir / 'transport_chemkin.DAT'}", "--permissive"],
+                stdout=log, stderr=subprocess.STDOUT, check=True, text=True,
+            )
+    return str(chem_yaml.resolve())
+
+
+def worker_loop(worker_id: int, task_q: Queue, ready_q: Queue, status_q: Queue,
+                dll_path: str, mech_path: str, base_dir: str, scratch_root: str,
+                settings_doc: dict) -> None:
+    """Per-worker loop (ported pattern): init DLL once, solve cases, atomic parquet commits."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from scarfs.data.config import StorageConfig
+
+    settings = GenV2Settings(**{**settings_doc,
+                                "storage": StorageConfig(**settings_doc["storage"])})
+    g2.init_worker_cracksim(dll_path, mech_path, Path(base_dir), Path(scratch_root), ready_q)
+    scratch = Path(scratch_root)
+    try:
+        while True:
+            item = task_q.get()
+            if item is None:
+                break
+            t0 = time.monotonic()
+            case_id = item.get("id", "?")
+            try:
+                df, audit = g2.run_case_v2(item, settings)
+                dt = time.monotonic() - t0
+                if df is None:
+                    status_q.put(("drop", worker_id, case_id, dt, str(audit)))
+                    print(f"[w{worker_id}] DROP case {case_id} ({audit}) {dt:.1f}s", flush=True)
+                    continue
+                out_tmp = scratch / f"case_{case_id}.tmp.parquet"
+                out_file = scratch / f"case_{case_id}.parquet"
+                table = pa.Table.from_pandas(df, preserve_index=False)
+                pq.write_table(table, str(out_tmp), compression="snappy")
+                out_tmp.rename(out_file)
+                status_q.put(("done", worker_id, case_id, dt, json.dumps(audit)))
+                print(f"[w{worker_id}] DONE case {case_id} rows={len(df)} {dt:.1f}s", flush=True)
+            except Exception as e:  # noqa: BLE001
+                dt = time.monotonic() - t0
+                warnings.warn(f"[w{worker_id}] error on case {case_id}: {e}")
+                status_q.put(("drop", worker_id, case_id, dt, f"exception: {e}"))
+    finally:
+        status_q.put(("exit", worker_id, None, None, None))
+
+
+def run_tier(args) -> int:
+    base_dir = REPO
+    dll_path = str((base_dir / "SA_CRACKSIM.dll").resolve())
+    if not Path(dll_path).exists():
+        print(f"ERROR: {dll_path} not found — place the CRACKSIM DLL in the repo root.",
+              file=sys.stderr)
+        return 1
+    mech_path = _ensure_mechanism(base_dir)
+
+    out_root = Path(args.out)
+    scratch = out_root / "scratch"
+    scratch.mkdir(parents=True, exist_ok=True)
+
+    settings = GenV2Settings(n_points=args.n_points, solver_rtol=args.rtol,
+                             solver_atol=args.atol)
+    settings.storage.max_frac_jump = args.max_frac_jump
+
+    cases, manifest = g2.build_v2_manifest(args.tier, seed=args.seed)
+    print(f"tier={args.tier}: {manifest['n_cases']} cases, regimes={manifest['regime_counts']}")
+    finalize_flow(cases, mech_path)
+    runner_cases = [g2.to_runner_case(c, settings) for c in cases]
+
+    if args.skip_existing:
+        existing = {int(p.stem.split("_")[1]) for p in scratch.glob("case_*.parquet")}
+        runner_cases = [c for c in runner_cases if c["id"] not in existing]
+        print(f"--skip-existing: {len(existing)} already on disk, {len(runner_cases)} to solve")
+
+    manifest["settings"] = {**settings.__dict__, "storage": settings.storage.__dict__}
+    (out_root / f"{args.tier}_manifest.json").write_text(
+        json.dumps(manifest, indent=2, default=str), encoding="utf-8")
+
+    task_q: Queue = Queue()
+    ready_q: Queue = Queue()
+    status_q: Queue = Queue()
+    n_workers = max(1, int(args.n_cpu))
+    settings_doc = {**settings.__dict__, "storage": settings.storage.__dict__}
+    workers = [Process(target=worker_loop,
+                       args=(i, task_q, ready_q, status_q, dll_path, mech_path,
+                             str(base_dir), str(scratch), settings_doc))
+               for i in range(n_workers)]
+    for w in workers:
+        w.start()
+    ready = [ready_q.get() for _ in workers]
+    bad = [r for r in ready if r != "READY"]
+    if bad:
+        print(f"ERROR: worker init failed: {bad}", file=sys.stderr)
+        for _ in workers:
+            task_q.put(None)
+        return 1
+
+    t0 = time.time()
+    for c in runner_cases:
+        task_q.put(c)
+    for _ in workers:
+        task_q.put(None)
+
+    audits, done, dropped, exited = [], 0, 0, 0
+    while exited < n_workers:
+        kind, _wid, _cid, _dt, payload = status_q.get()
+        if kind == "done":
+            done += 1
+            audits.append(json.loads(payload))
+        elif kind == "drop":
+            dropped += 1
+        elif kind == "exit":
+            exited += 1
+        if (done + dropped) and (done + dropped) % 50 == 0:
+            rate = (done + dropped) / max(time.time() - t0, 1e-9)
+            print(f"... {done} done / {dropped} dropped "
+                  f"({rate * 3600:.0f} cases/h)", flush=True)
+    for w in workers:
+        w.join()
+
+    # merge per-case parquets for THIS tier's case ids
+    import pyarrow.parquet as pq
+    import pyarrow as pa
+
+    tier_ids = {c["id"] for c in (g2.to_runner_case(c, settings) for c in cases)}
+    files = sorted(p for p in scratch.glob("case_*.parquet")
+                   if int(p.stem.split("_")[1]) in tier_ids)
+    if not files:
+        print("ERROR: no case files produced", file=sys.stderr)
+        return 1
+    out_file = out_root / f"{args.tier}.parquet"
+    writer = None
+    n_rows = 0
+    for p in files:
+        t = pq.read_table(str(p))
+        n_rows += t.num_rows
+        if writer is None:
+            writer = pq.ParquetWriter(str(out_file), t.schema, compression="snappy")
+        writer.write_table(t)
+    if writer is not None:
+        writer.close()
+
+    sign = g2.aggregate_sign_audits(audits)
+    (out_root / f"{args.tier}_audits.json").write_text(
+        json.dumps({"cases_done": done, "cases_dropped": dropped,
+                    "sign_audit": sign, "per_case": audits}, indent=2), encoding="utf-8")
+    print(f"\n{args.tier}: {done} cases ok / {dropped} dropped -> {out_file} "
+          f"({n_rows} rows, {len(files)} cases)")
+    print(f"sign audit: worst min absorption {sign['worst_min_absorption']:.3g} J/m3/s, "
+          f"material_negative={sign['material_negative']}")
+    if sign["material_negative"]:
+        print("NOTE: material negative absorption found -> E-c escape hatch applies "
+              "(switch the energy head to shifted-softplus); see MERGE_DESIGN.md.")
+
+    if args.tier == "smoke" or args.gates:
+        return run_gates_on(out_file, args)
+    return 0
+
+
+def run_gates_on(parquet_path: Path, args) -> int:
+    """Run gates A (DLL consistency), C (front resolution), D (sign) on a generated parquet."""
+    import pandas as pd
+
+    base_dir = REPO
+    dll_path = str((base_dir / "SA_CRACKSIM.dll").resolve())
+    mech_path = _ensure_mechanism(base_dir)
+    ready_q: Queue = Queue()
+    g2.init_worker_cracksim(dll_path, mech_path, base_dir,
+                            Path(args.out) / "scratch", ready_q)
+    if ready_q.get() != "READY":
+        print("ERROR: gate init failed", file=sys.stderr)
+        return 1
+
+    df = pd.read_parquet(parquet_path)
+    ref = df[df["sample_kind"] == "trajectory"] if "sample_kind" in df.columns else df
+    a = g2.gate_dll_consistency(ref.sample(min(64, len(ref)), random_state=0))
+    c = g2.gate_front_resolution(df, max_frac_jump=args.max_frac_jump)
+    print(f"GATE A (DLL/dYdt consistency): max_rel={a['max_rel_diff']:.3e} "
+          f"on {a['n_compared']} entries -> {'PASS' if a['passed'] else 'FAIL'}")
+    print(f"GATE C (front resolution):     p95 jump {c['p95_jump_frac']:.3f} "
+          f"<= {c['threshold']:.3f} -> {'PASS' if c['passed'] else 'FAIL'}")
+    ok = a["passed"] and c["passed"]
+    print(f"GATES: {'ALL PASS' if ok else 'FAILED — do not run production tiers'}")
+    return 0 if ok else 2
+
+
+def run_off_manifold(args) -> int:
+    import pandas as pd
+
+    base_dir = REPO
+    dll_path = str((base_dir / "SA_CRACKSIM.dll").resolve())
+    mech_path = _ensure_mechanism(base_dir)
+    ready_q: Queue = Queue()
+    out_root = Path(args.out)
+    (out_root / "scratch").mkdir(parents=True, exist_ok=True)
+    g2.init_worker_cracksim(dll_path, mech_path, base_dir, out_root / "scratch", ready_q)
+    if ready_q.get() != "READY":
+        print("ERROR: init failed", file=sys.stderr)
+        return 1
+
+    settings = GenV2Settings(n_points=args.n_points, solver_rtol=args.rtol,
+                             solver_atol=args.atol)
+    anchors = pd.read_parquet(args.source)
+    anchors = anchors[anchors["sample_kind"] == "trajectory"] \
+        if "sample_kind" in anchors.columns else anchors
+    cfg = g2.PerturbConfig(sigma_log=args.sigma_log,
+                           points_per_anchor=args.points_per_anchor)
+    print(f"off-manifold: target {args.off_manifold} points from {len(anchors)} anchors "
+          f"(sigma_log={cfg.sigma_log}, {cfg.points_per_anchor}/anchor)")
+    t0 = time.time()
+    df = g2.eval_offmanifold_points(anchors, args.off_manifold, settings, cfg, seed=args.seed)
+    out = Path(args.out) / f"offmanifold_{len(df)}.parquet"
+    df.to_parquet(out, index=False)
+    print(f"wrote {out} ({len(df)} rows) in {time.time() - t0:.1f}s")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="SCARFS v2 database generator (Windows + CRACKSIM)")
+    ap.add_argument("--tier", choices=("smoke", "pilot", "full", "test"), default=None)
+    ap.add_argument("--out", default="out_v2")
+    ap.add_argument("--n-cpu", type=int, default=max(1, (os_cpu := __import__("os").cpu_count() or 2) - 2))
+    ap.add_argument("--n-points", type=int, default=400)
+    ap.add_argument("--rtol", type=float, default=1e-9)
+    ap.add_argument("--atol", type=float, default=1e-16)
+    ap.add_argument("--max-frac-jump", type=float, default=0.03)
+    ap.add_argument("--seed", type=int, default=20260612)
+    ap.add_argument("--skip-existing", action="store_true")
+    ap.add_argument("--gates", action="store_true", help="run gates after the tier / standalone")
+    ap.add_argument("--reference", default=None, help="parquet for standalone --gates")
+    ap.add_argument("--off-manifold", type=int, default=None, help="N points to generate")
+    ap.add_argument("--source", default=None, help="anchor parquet for --off-manifold")
+    ap.add_argument("--sigma-log", type=float, default=0.25)
+    ap.add_argument("--points-per-anchor", type=int, default=4)
+    args = ap.parse_args(argv)
+
+    if args.off_manifold:
+        if not args.source:
+            ap.error("--off-manifold requires --source <trajectory parquet>")
+        return run_off_manifold(args)
+    if args.gates and args.tier is None:
+        if not args.reference:
+            ap.error("standalone --gates requires --reference <parquet>")
+        return run_gates_on(Path(args.reference), args)
+    if args.tier is None:
+        ap.error("choose --tier, --gates --reference, or --off-manifold")
+    return run_tier(args)
+
+
+if __name__ == "__main__":
+    try:
+        set_start_method("spawn")  # Windows default; explicit for cross-platform determinism
+    except RuntimeError:
+        pass
+    raise SystemExit(main())
