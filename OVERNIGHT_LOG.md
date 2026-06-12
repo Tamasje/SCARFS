@@ -166,3 +166,36 @@ Training-experiment count is tracked against the 12-run cap; analyses (no traini
 - Figure: `runs/overnight_fig/latent_source_diagnosis.png`
   (`scripts/overnight/fig_diagnosis.py`; floor-relative curves + overfit-discriminator bars).
 - Training experiments used: 10 / 12. Wall: ~3 h / 8 h. No pushes anywhere.
+
+---
+
+# GPU SESSION ADDENDUM (user-requested, same branch, 2026-06-12 afternoon)
+
+## GPU-1/GPU-2 · MPS support + head fine-tune + k sweep A/B
+- MPS (Apple GPU) wired (`_select_device`; closures device-safe); ~2 s/epoch → 300-epoch
+  stride5 runs in ~4 min. `OptimConfig.head_finetune_epochs` added (trunk-frozen energy_net
+  re-tune, val-head-loss checkpoint) + regression test. Suite green on MPS.
+- A/B (identical data/splits/budget, `scripts/gpu_train_ablation.py`):
+  v1 = canonical config (spectral_norm TRUE, consistency 0.1): k16 absorption R² 0.777,
+  early-stop ~ep10. v2 = overnight recipe (SN false, consistency 0.02): **k16 0.965 /
+  k12 0.981 / k8 0.970 (rate-derived val), head 0.974–0.987 after fine-tune; 300 epochs.**
+  → defaults flipped in configs/train_merged.json with the measured cost documented;
+  SN kept as a CFD-stability ablation lever.
+
+## GPU-3 · concluding TEST evaluation (k=12 winner; 751 cases / 16,129 rows)
+- Command: `scripts/concluding_figures.py --ablation-dir runs/gpu_ablation_v2` + the
+  clamped/head analysis (transcript-logged inline script).
+- **DISTILLED HEAD (deployed UDF path): 8/9 §5 gates PASS** — R² 0.9869, relRMSE 0.1146,
+  per-case tail median 3.42%, tail p95 4.89% (beats the FINAL 10% target), tail relRMSE
+  0.159, front peak-τ 0.0000 / CDF 0.0104, ∫ budget median 2.87%, 0 negative predictions.
+  FAIL: per-case ∫S_E dτ p95 = 0.47 (worst ~5% of cases).
+- Rate-derived path: raw global metrics destroyed by 69/16,129 rows (0.43%) of sinh-amplified
+  OOD excursions (15.8% raw negatives); as-deployed (UDF clamp 1.5e9 + positivity):
+  global R² 0.807, tail median 4.56% / p95 5.78%, front exact. The head distillation is
+  doing precisely its design job.
+- QoI mass-rate R² (test): C2H6 0.991, C2H4 0.984, H2 0.987, CH4 0.875, C3H6 0.794,
+  C2H2 0.746, **BENZENE −1.08 (flagged)** — minors below the a-priori floor; HPC longer
+  training + front-adaptive data target these.
+- Latent ω_Z target-space R² per dim (test): 0.46–0.73, mean 0.634.
+- All numbers remain bootstrap-grade (stride-stored stride5; certification = regenerated
+  front-adaptive test DB per MERGE_DESIGN §5.7).
