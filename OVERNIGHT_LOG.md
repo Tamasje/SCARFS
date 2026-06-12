@@ -46,3 +46,24 @@ Training-experiment count is tracked against the 12-run cap; analyses (no traini
   carry the information that determines ż — (z,q)→ż caps at ~0.55–0.6 explained variance ON
   THE TRAINING BATCH ITSELF, while the full 212-dim composition memorizes the same target.
   The ω_Z closure is input-information-limited at k=8, not optimization- or capacity-limited.
+
+---
+
+## FIX-1 · s_Z source-based freeze (Phase 4, applied)
+- Change: `scarfs/training/train.py::freeze_latent_arcsinh_scale` now freezes
+  s_Z,i = median|E·(Ẏ⊘σ)|_i (the SOURCE distribution, ArcsinhScaler convention) instead of
+  median|E·x|_i (the STATE); legacy call signature falls back with a loud warning. Call site
+  moved after the dYdt block. Regression test added:
+  `tests/test_training_merged.py::test_latent_arcsinh_scale_uses_source_not_state`.
+- Verification: targeted tests 26 passed (incl. end-to-end integration).
+
+## E5 · training exp 6 · 14-epoch full train, fix @ k=8
+- Command: `.venv/bin/python -m scarfs.training.train --config runs/overnight_e5_cfg.json`
+  (= bootstrap cfg + epochs/patience 14, out runs/overnight_e5_k8_fix).
+- Data: stride5 re-split (same seed 0 splits as baseline).
+- Result: saved s_Z now 4.3–103 (source units ✓). Val latent_source ≈ 15.40 FLAT vs
+  corrected-target Var 15.8 (E1) → still at the mean floor in the new units; val rate 0.111;
+  val absorption R² 0.668 (rate-derived) / −0.05 (head) at 14 epochs.
+- Verdict: fix corrects units/conditioning (floor 50→15.8 by construction; pre-registered
+  caveat: the ≥25% numeric drop is a UNIT change, not learning). Val skill at k=8/14 epochs
+  ≈ 0 → consistent with the H7 information ceiling; k-comparison (E6) is the discriminator.

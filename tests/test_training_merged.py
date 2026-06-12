@@ -735,3 +735,46 @@ def test_no_winsorize_in_merged_loss():
     )
     # assert: absorption_target must be identical after the call
     torch.testing.assert_close(abs_target, abs_before, msg="absorption_target was modified (possible winsorization)")
+
+
+# ---------------------------------------------------------------------------
+# Regression: latent arcsinh scale must come from the SOURCE, not the STATE
+# (overnight diagnosis 2026-06-12: state-based s_Z mis-scaled the latent-source
+# target by 10-1000x per dim; the loss floor equalled the target variance ~50
+# and the omega_Z head learned nothing.)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not _TORCH_AVAILABLE, reason="PyTorch not available")
+def test_latent_arcsinh_scale_uses_source_not_state():
+    """s_Z must track median|E.(dYdt/sigma)| (source), not median|E.x| (state)."""
+    from scarfs.training.train import freeze_latent_arcsinh_scale
+
+    # arrange: state O(1), source O(1e4) per dim through an identity-ish encoder
+    rng = np.random.default_rng(3)
+    n, n_dry, k = 256, 6, 2
+
+    class _Enc(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.encoder = nn.Linear(n_dry, k, bias=False)
+
+    model = _Enc()
+    with torch.no_grad():
+        w = torch.zeros((k, n_dry))
+        w[0, 0] = 1.0
+        w[1, 1] = 1.0
+        model.encoder.weight.copy_(w)
+    x_std = rng.normal(0.0, 1.0, (n, n_dry))                  # state O(1)
+    dydt = rng.normal(0.0, 1.0, (n, n_dry)) * 1.0e2           # raw rates
+    sigma = np.full(n_dry, 1.0e-2)                            # trace-sigma amplification
+
+    # act
+    s_source = freeze_latent_arcsinh_scale(model, x_std, dydt_dry_train=dydt, sigma_comp=sigma)
+    with pytest.warns(UserWarning, match="latent-STATE"):
+        s_state = freeze_latent_arcsinh_scale(model, x_std)
+
+    # assert: source-based scale tracks median|zdot| ~ 1e4 / state-based ~ O(1)
+    z_dot = (dydt / sigma) @ model.encoder.weight.detach().numpy().T
+    np.testing.assert_allclose(s_source, np.median(np.abs(z_dot), axis=0), rtol=1e-12)
+    assert np.all(s_source > 1e3), f"source scale should be O(1e4), got {s_source}"
+    assert np.all(s_state < 10.0), f"state fallback should be O(1), got {s_state}"

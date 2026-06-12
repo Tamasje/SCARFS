@@ -218,18 +218,49 @@ def pca_init_encoder(model, X_comp_train: np.ndarray) -> np.ndarray:
     return components
 
 
-def freeze_latent_arcsinh_scale(model, X_comp_train: np.ndarray) -> np.ndarray:
-    """Compute per-dim arcsinh scale constants for the latent source from the PCA-init encoder.
+def freeze_latent_arcsinh_scale(
+    model,
+    X_comp_train: np.ndarray,
+    dydt_dry_train: np.ndarray | None = None,
+    sigma_comp: np.ndarray | None = None,
+) -> np.ndarray:
+    """Per-dim arcsinh scale constants for the latent SOURCE, frozen at the PCA-init pass.
 
-    Returns a ``(k,)`` array: per-dimension median |E·X_comp| used as arcsinh scale.
-    These are frozen after the PCA init pass and do not change during training.
+    The constants scale the latent-source target ``arcsinh(ż / s_Z)`` with
+    ``ż = E·(Ẏ ⊘ σ)``, so they must come from the distribution of the SOURCE
+    ``s_Z,i = median |ż_i|`` — the ArcsinhScaler convention everywhere else in the package
+    (median of the quantity being scaled). The original implementation froze the latent
+    STATE scale ``median |E·x_std|`` instead, which is 1–3 orders of magnitude smaller
+    (state is O(1–10), source is O(10–100+) in 1/s): every target landed on the arcsinh
+    log branches, turning ω_Z regression into a ±8–17 sign×log-magnitude field whose
+    variance (~50) equals the observed stuck loss — the head could only predict the mean
+    (overnight diagnosis E1/E2b/E3b, 2026-06-12).
+
+    Parameters
+    ----------
+    model
+        PCA-initialised model (its encoder defines E).
+    X_comp_train
+        ``(n, n_dry)`` standardised composition (legacy fallback only).
+    dydt_dry_train
+        ``(n, n_dry)`` raw dY/dt for the dry species [1/s]. Required for the correct
+        source-based scale; when ``None``, falls back to the legacy state-based scale
+        with a warning (kept only so old call sites fail loudly rather than silently).
+    sigma_comp
+        ``(n_dry,)`` per-species composition-scaler scale σ (with ``dydt_dry_train``).
     """
     import torch
     with torch.no_grad():
         enc_w = model.encoder.weight.detach().cpu().numpy()  # (k, n_dry)
-        z = X_comp_train @ enc_w.T                            # (n_train, k)
-    scale = np.maximum(np.median(np.abs(z), axis=0), 1e-12)
-    return scale
+    if dydt_dry_train is not None and sigma_comp is not None:
+        z_dot = (np.asarray(dydt_dry_train, dtype=float) / np.asarray(sigma_comp, dtype=float)) @ enc_w.T
+        return np.maximum(np.median(np.abs(z_dot), axis=0), 1e-12)
+    warnings.warn(
+        "freeze_latent_arcsinh_scale: no dydt/sigma supplied — falling back to the latent-STATE "
+        "scale, which mis-scales the latent-source target by orders of magnitude (see docstring)."
+    )
+    z = X_comp_train @ enc_w.T                            # (n_train, k)
+    return np.maximum(np.median(np.abs(z), axis=0), 1e-12)
 
 
 # ---------------------------------------------------------------------------
@@ -615,9 +646,9 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = build_model(cfg, bundle.spec).to(device)
 
-    # PCA-init encoder on the standardized composition; freeze latent arcsinh scales
+    # PCA-init encoder on the standardized composition (latent arcsinh scales are frozen
+    # AFTER the dYdt block below — they must come from the latent-SOURCE distribution)
     pca_init_encoder(model, X_comp_train)
-    arcsinh_latent_scale = freeze_latent_arcsinh_scale(model, X_comp_train)
     arcsinh_rate_scale = rate_scaler.scale_
 
     # thermo restricted to the energy-active set (selection guarantees thermo coverage)
@@ -665,6 +696,13 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         dydt_dry_train = np.zeros((len(df_train), n_in))
         rho_train = np.ones(len(df_train))
         dydt_dry_val = rho_val = None
+
+    # latent-SOURCE arcsinh scales: s_Z,i = median |ż_i| with ż = E_init·(Ẏ ⊘ σ)
+    arcsinh_latent_scale = freeze_latent_arcsinh_scale(
+        model, X_comp_train,
+        dydt_dry_train=dydt_dry_train if schema.has_dydt() else None,
+        sigma_comp=sigma_comp_all,
+    )
 
     # differentiable rate-derived absorption: unstandardize T from the thermo block
     import torch as _torch

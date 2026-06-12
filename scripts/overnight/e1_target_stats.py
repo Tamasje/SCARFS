@@ -32,7 +32,7 @@ from scarfs.benchmark.loader import infer_schema
 from scarfs.models.adapter import TorchSurrogate
 from scarfs.training.datamodule import tripartite_case_split
 
-BUNDLE = REPO / "runs" / "merged_bootstrap_stride5"
+BUNDLE = REPO / "runs" / "merged_bootstrap_stride5"   # overridden by --bundle
 DEFAULT_DB = "/Users/tamasbuzogany/Documents/SCARFS/TEST_ETHANE_LOW_sobol_stride5.parquet"
 
 
@@ -63,7 +63,12 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--database", default=DEFAULT_DB)
     ap.add_argument("--rows-cap", type=int, default=20000)
+    ap.add_argument("--bundle", default=None,
+                    help="Bundle dir to audit (default: runs/merged_bootstrap_stride5)")
     args = ap.parse_args()
+    global BUNDLE
+    if args.bundle:
+        BUNDLE = Path(args.bundle)
 
     dfv, schema, spec = load_val_frame(args.database, args.rows_cap)
     print(f"data: {args.database}")
