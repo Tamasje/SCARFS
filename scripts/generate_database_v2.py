@@ -272,6 +272,8 @@ def _print_gate_a(a: dict) -> None:
     print(f"  max_rel={a['max_rel_diff']:.3e}  median={a['median_rel_diff']:.3e}  "
           f"p95={a['p95_rel_diff']:.3e}  on {a['n_compared']} entries "
           f"-> {'PASS' if a['passed'] else 'FAIL'}")
+    print(f"  stored-dYdt mass closure p95: {a['mass_closure_p95']:.3e}  "
+          f"(≈0 => mass-conserving; ~6e-2 => extra-MW units bug)")
     print(f"  zero-recompute fraction: {a['zero_recompute_frac']:.3f}  "
           f"(1.0 => DLL returns zeros outside solve context: statefulness)")
     print(f"  raw nonzero frac (row 0): {a['raw_nonzero_frac_row0']:.3f}   "

@@ -334,3 +334,29 @@ def test_settings_from_doc_ignores_transport_flags():
     assert rebuilt.storage.mode == base.storage.mode
     assert rebuilt.storage.max_frac_jump == pytest.approx(base.storage.max_frac_jump)
     assert not hasattr(rebuilt, "gate_a_in_worker")
+
+
+def test_dydt_and_energy_units_are_mass_conserving():
+    """REGRESSION (gate-A finding 2026-06-12): pfr.solve returns MASS rate r·MW [kg/m³/s].
+    The true dY/dt = mass_rate/ρ (mass-conserving, Σ=0); the colleague's chain
+    compute_dYdt_from_wdot(mass_rate, MW, ρ) multiplies by MW again → Σ dYdt ≠ 0. Energy
+    must use the MOLAR rate r = mass_rate/MW. This locks the corrected v2 physics."""
+    from scarfs.data.generation_v2 import compute_dYdt_from_wdot, compute_reaction_energy_terms
+
+    # arrange: synthetic molar net rates that conserve MASS (Σ r_i·MW_i = 0)
+    rng = np.random.default_rng(0)
+    n_sp = 8
+    MW = rng.uniform(2.0, 200.0, n_sp)          # kg/kmol, wide spread like the real mechanism
+    r = rng.normal(0, 1.0, n_sp)                # molar rate [kmol/m³/s]
+    r[-1] = -(r[:-1] @ MW[:-1]) / MW[-1]         # force Σ r_i·MW_i = 0 (mass conservation)
+    rho = 0.6
+    mass_rate = r * MW                           # what pfr.solve actually returns
+
+    # act
+    dYdt_correct = mass_rate / rho                              # v2 corrected
+    dYdt_buggy = compute_dYdt_from_wdot(mass_rate, MW, np.array([rho]))[0]  # colleague's chain
+
+    # assert: corrected dY/dt conserves mass; the buggy one does not; they differ by MW
+    assert abs(dYdt_correct.sum()) < 1e-9 * np.abs(dYdt_correct).sum(), "corrected dYdt must close"
+    assert abs(dYdt_buggy.sum()) > 1e-2 * np.abs(dYdt_buggy).sum(), "buggy dYdt should NOT close"
+    np.testing.assert_allclose(dYdt_buggy / dYdt_correct, MW, rtol=1e-9)  # exactly one extra MW

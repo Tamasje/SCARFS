@@ -643,9 +643,21 @@ def run_case_v2(case: dict, settings: GenV2Settings):
                                + 1.0 / np.clip(u_f[:-1], 1e-300, None))
             tau_f[1:] = np.cumsum(inv_u_mid * np.diff(z_full))
 
-        wdot_f = convert_raw_rates_to_kmol_m3_s(rates_full)
-        dYdt_f = compute_dYdt_from_wdot(wdot_f, mw, rho_f)
-        absorption_f = compute_reaction_energy_terms(gas, T_full, P_full, Y_full, wdot_f)
+        # UNITS (verified 2026-06-12, gate-A finding): customPFR.solve returns ``rates`` =
+        # NetRates·MW = the MASS production rate [kg/m³/s] (it is mass-conserving: Σ_i ≈ 0 to
+        # 6e-8 on stride5). Therefore:
+        #   dY_i/dt   = mass_rate_i / ρ                      [1/s]   (true mass-fraction rate)
+        #   molar r_i = mass_rate_i / MW_i                    [kmol/m³/s] (for the energy sum)
+        #   absorption = Σ_i h_molar_i · r_i                  [J/m³/s]
+        # The colleague's generator (and the initial v2 port) fed this MASS rate into
+        # compute_dYdt_from_wdot — which multiplies by MW a SECOND time — so stride5's dYdt and
+        # energy columns carry an extra per-species MW. Do NOT use the molar-input helpers on
+        # ``rates_full`` here; they are correct only for the genuinely-molar NetRates output
+        # (used by the off-manifold path and Gate A). See RUNBOOK / OVERNIGHT_REPORT.
+        mass_rate_f = rates_full                                       # [kg/m³/s]
+        dYdt_f = mass_rate_f / np.clip(rho_f, 1.0e-300, None)[:, None]
+        molar_rate_f = mass_rate_f / mw[None, :]                       # [kmol/m³/s] = NetRates r
+        absorption_f = compute_reaction_energy_terms(gas, T_full, P_full, Y_full, molar_rate_f)
 
         # FRONT-ADAPTIVE storage on the full solved grid (the v2 point).
         store_idx = select_storage_indices(absorption_f, settings.storage)
@@ -830,6 +842,14 @@ def gate_dll_consistency(reference_df, n_rows: int = 64, rel_tol: float = 1.0e-6
         wdot = convert_raw_rates_to_kmol_m3_s(raw[np.newaxis, :])
         recomputed[j, :] = compute_dYdt_from_wdot(wdot, mw, np.array([gas.density]))[0]
 
+    # MW-FREE mass-conservation check on the STORED dYdt: Σ_i dY_i/dt = d/dt(Σ Y_i) = 0.
+    # A true mass-fraction rate closes to ~solver tol; an extra-MW artifact (stride5) closes
+    # at ~6% — the discriminator that identified the gate-A units bug on 2026-06-12.
+    row_sum = np.abs(stored.sum(axis=1))
+    row_scale = np.abs(stored).sum(axis=1) + 1e-300
+    mass_closure = row_sum / row_scale
+    mass_closure_p95 = float(np.percentile(mass_closure, 95))
+
     mask = np.abs(stored) > dydt_floor
     rel = np.abs(recomputed[mask] - stored[mask]) / np.abs(stored[mask])
 
@@ -856,11 +876,12 @@ def gate_dll_consistency(reference_df, n_rows: int = 64, rel_tol: float = 1.0e-6
         "max_rel_diff": float(rel.max()) if mask.any() else 0.0,
         "median_rel_diff": float(np.median(rel)) if mask.any() else 0.0,
         "p95_rel_diff": float(np.percentile(rel, 95)) if mask.any() else 0.0,
+        "mass_closure_p95": mass_closure_p95,
         "zero_recompute_frac": zero_recompute_frac,
         "raw_nonzero_frac_row0": raw_nonzero_frac,
         "double_call_max_abs_diff": double_call_max_abs_diff,
         "per_species_worst": per_species_worst,
-        "passed": bool(mask.any() and float(rel.max()) < rel_tol),
+        "passed": bool(mask.any() and float(rel.max()) < rel_tol and mass_closure_p95 < 1.0e-2),
         "rel_tol": rel_tol,
     }
     return out
