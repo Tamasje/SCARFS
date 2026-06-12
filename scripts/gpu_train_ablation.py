@@ -33,12 +33,21 @@ def main() -> None:
     ap.add_argument("--patience", type=int, default=50)
     ap.add_argument("--head-finetune", type=int, default=40)
     ap.add_argument("--out", default="runs/gpu_ablation")
+    ap.add_argument("--base-config", default="configs/train_merged.json")
+    ap.add_argument("--spectral-norm", choices=("true", "false"), default=None,
+                    help="override model.spectral_norm")
+    ap.add_argument("--consistency-weight", type=float, default=None,
+                    help="override loss.consistency_weight")
     args = ap.parse_args()
 
     print(f"device: {_select_device()}", flush=True)
     out_root = REPO / args.out
     out_root.mkdir(parents=True, exist_ok=True)
-    base = json.loads((REPO / "configs" / "train_merged.json").read_text(encoding="utf-8"))
+    base = json.loads((REPO / args.base_config).read_text(encoding="utf-8"))
+    if args.spectral_norm is not None:
+        base["model"]["spectral_norm"] = args.spectral_norm == "true"
+    if args.consistency_weight is not None:
+        base["loss"]["consistency_weight"] = args.consistency_weight
     summary: dict[str, dict] = {}
 
     for k in [int(x) for x in args.ks.split(",") if x.strip()]:
