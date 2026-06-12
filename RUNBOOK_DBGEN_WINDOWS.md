@@ -50,8 +50,18 @@ the documented reason v2 exists.)
 ## 2. Pilot (~1,230 cases) — the prove-it-works subset
 
 ```bat
-python scripts\generate_database_v2.py --tier pilot --n-cpu 10 --skip-existing
+python scripts\generate_database_v2.py --tier pilot --n-cpu 10 --n-points 1600 --skip-existing
 ```
+
+**On the smoke run's grid recommendation:** the steepest single solver step can span most of
+the peak absorption in hot (ignition-like) cases. This is PHYSICAL, not a bug, and the data is
+accurate regardless — scipy's VODE/BDF solver takes adaptive internal steps; `--n-points` only
+sets how finely we SAMPLE/store the trajectory. Do NOT chase the raw "32x" figure: fully
+resolving an ignition front is impractical and unnecessary for a state→rate surrogate (the
+off-manifold cloud densifies the high-|S_E| region in state space instead). `--n-points 1600`
+(~4x) is the pragmatic value: it improves front sampling and the per-case ∫S_E dτ metric without
+runaway solve time. The per-regime grid breakdown in the run output tells you if any specific
+regime needs more.
 
 ~6% of every regime stream (body 720, inlet 150, high-T 150, tail 120, deep-conversion 90).
 Rough duration: stride5 averaged tens of seconds per case at 100 grid points; at 400 points

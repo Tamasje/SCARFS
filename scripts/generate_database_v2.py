@@ -224,9 +224,27 @@ def run_tier(args) -> int:
     if grid_max:
         gmax = max(grid_max)
         pol = settings.storage.max_frac_jump
-        print(f"solve-grid resolution: worst per-case STEEPEST single-step jump = {gmax:.3f} of "
-              f"peak (policy {pol}); the steepest solver step is the smallest achievable stored "
-              f"jump, so raise --n-points by ~{max(1.0, gmax / pol):.1f}x to bring it within policy")
+        # Per-regime breakdown: localise WHERE the steep (near-discontinuous, ignition-like)
+        # fronts are. Steep fronts are expected in hot regimes and are physical, not a bug —
+        # the ODE solver is adaptive (internal steps ≠ output grid), so each stored point is
+        # accurate (Gate A confirms). --n-points only sets SAMPLING density of the front.
+        by_regime: dict[str, list[float]] = {}
+        for a in audits:
+            if "grid_max_jump_frac" in a:
+                by_regime.setdefault(a.get("regime", "?"), []).append(a["grid_max_jump_frac"])
+        print(f"solve-grid front sampling: worst single-step jump = {gmax:.3f} of peak "
+              f"(policy {pol}); per-regime median steepest step:")
+        for r in sorted(by_regime):
+            v = by_regime[r]
+            print(f"    {r:16s} median {np.median(v):.3f}  max {max(v):.3f}  (n={len(v)})")
+        # Recommendation is CAPPED: fully resolving an ignition front below 3%/step needs an
+        # impractical grid AND is unnecessary for a state→rate surrogate (the off-manifold
+        # cloud densifies the high-|S_E| region in STATE space instead). A 3–5x bump improves
+        # front sampling and the per-case ∫S_E dτ budget metric without runaway solve cost.
+        raw_factor = gmax / pol
+        rec = min(5.0, max(1.0, raw_factor))
+        print(f"  recommended --n-points multiplier: ~{rec:.1f}x (raw {raw_factor:.1f}x capped at 5x; "
+              f"near-discontinuous fronts are physical — let the off-manifold cloud cover the rest)")
     if gate_a_worker is not None:
         print("\nGATE A (in-worker, post-solve context):")
         _print_gate_a(gate_a_worker)
