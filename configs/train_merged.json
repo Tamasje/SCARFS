@@ -1,5 +1,5 @@
 {
-  "_comment": "Merged model: full dry input, energy-active targets, tail+enthalpy weighting, sigma_floor 1e-10, head fine-tune. spectral_norm=false and consistency_weight=0.02 are MEASURED defaults (GPU A/B 2026-06-12: SN-on + cons 0.1 costs ~0.19 absorption R2 at k=16 and early-stops by epoch ~10; SN remains available as a CFD-stability ablation lever). rollout_mode=lagrangian assumes fine-dtau (front-adaptive) data - use manifold on stride-stored databases. Certification on HPC front-adaptive DB.",
+  "_comment": "Merged model defaults (MEASURED). rollout_mode=MANIFOLD: front-adaptive storage produces large/variable dtau, on which the Lagrangian explicit-Euler rollout is ill-posed and dominates the loss \u2014 pilot A/B 2026-06-12: lagrangian->manifold lifted test energy R2 0.56->0.775, val 0.75->0.96, latent R2 0.83->0.93, BENZENE rate R2 -0.56->+0.76. Lagrangian needs a dense fixed-fine-dtau storage mode, not front-adaptive. spectral_norm off, consistency 0.02, sigma_floor 1e-10, head_finetune 40 also measured. Certification on the front-adaptive test set.",
   "data": {
     "database_path": "Database_FINAL.parquet",
     "input_species": "dry_all",
@@ -71,7 +71,7 @@
     "atom_balance_weight": 0.0,
     "noise_std": 0.05,
     "unroll_steps": 1,
-    "rollout_mode": "lagrangian"
+    "rollout_mode": "manifold"
   },
   "output_dir": "runs/merged"
 }
