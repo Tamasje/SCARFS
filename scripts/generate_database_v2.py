@@ -336,6 +336,58 @@ def run_off_manifold(args) -> int:
     return 0
 
 
+def run_merge_only(args) -> int:
+    """Merge already-generated per-case parquets into {tier}.parquet WITHOUT solving.
+
+    For resuming after an abort (e.g. one stuck straggler case): every finished case is an
+    atomically-committed scratch file, so we just concatenate them. No DLL/Cantera needed —
+    the manifest (pure) supplies the tier's CaseID set so stray test-tier files are excluded,
+    and lightweight audits are recomputed from the merged data itself.
+    """
+    import pandas as pd
+    import pyarrow.parquet as pq
+
+    out_root = Path(args.out)
+    scratch = out_root / "scratch"
+    cases, _manifest = g2.build_v2_manifest(args.tier, seed=args.seed)
+    tier_ids = {int(c["id"]) for c in cases}
+    files = sorted(p for p in scratch.glob("case_*.parquet")
+                   if int(p.stem.split("_")[1]) in tier_ids)
+    if not files:
+        print(f"ERROR: no case files for tier '{args.tier}' in {scratch}", file=sys.stderr)
+        return 1
+    present = {int(p.stem.split("_")[1]) for p in files}
+    missing = sorted(tier_ids - present)
+
+    out_file = out_root / f"{args.tier}.parquet"
+    writer = None
+    n_rows = 0
+    for p in files:
+        t = pq.read_table(str(p))
+        n_rows += t.num_rows
+        if writer is None:
+            writer = pq.ParquetWriter(str(out_file), t.schema, compression="snappy")
+        writer.write_table(t)
+    writer.close()
+    print(f"merge-only: {len(files)}/{len(tier_ids)} cases -> {out_file} "
+          f"({n_rows} rows); {len(missing)} missing")
+    if missing:
+        head = ", ".join(str(m) for m in missing[:20])
+        print(f"  missing CaseIDs (un-run / aborted stragglers): {head}"
+              f"{' ...' if len(missing) > 20 else ''}")
+
+    # lightweight audits recomputed from the merged frame (no worker status needed)
+    df = pd.read_parquet(out_file)
+    traj = df[df["sample_kind"] == "trajectory"] if "sample_kind" in df.columns else df
+    sign = g2.sign_audit(traj["Reaction heat absorption [J/s/m3]"].to_numpy(float))
+    c = g2.gate_front_resolution(df, max_frac_jump=args.max_frac_jump)
+    print(f"sign audit: min absorption {sign['min_value']:.3g} J/m3/s, "
+          f"frac_negative {sign['frac_negative']:.2e}")
+    print(f"front resolution: policy-jump p95 {c['p95_jump_frac']:.3f} "
+          f"(grid max single-step {c['grid_max_jump_frac']:.3f})")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="SCARFS v2 database generator (Windows + CRACKSIM)")
     ap.add_argument("--tier", choices=("smoke", "pilot", "full", "test"), default=None)
@@ -347,6 +399,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-frac-jump", type=float, default=0.03)
     ap.add_argument("--seed", type=int, default=20260612)
     ap.add_argument("--skip-existing", action="store_true")
+    ap.add_argument("--merge-only", action="store_true",
+                    help="merge existing scratch case files into {tier}.parquet without solving "
+                         "(resume after an abort / stuck straggler)")
     ap.add_argument("--gates", action="store_true", help="run gates after the tier / standalone")
     ap.add_argument("--reference", default=None, help="parquet for standalone --gates")
     ap.add_argument("--off-manifold", type=int, default=None, help="N points to generate")
@@ -365,6 +420,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_gates_on(Path(args.reference), args)
     if args.tier is None:
         ap.error("choose --tier, --gates --reference, or --off-manifold")
+    if args.merge_only:
+        return run_merge_only(args)
     return run_tier(args)
 
 
