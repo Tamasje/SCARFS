@@ -17,6 +17,34 @@ revised, 5 rejected**. Every claim below is grounded in `file:line` and tagged f
 
 ---
 
+## Implementation status — 2026-06-19 (branch `physics-optimizations`)
+
+All proposals below are **implemented and tested** (496 passed / 5 skipped, 0 failed; the C UDF
+forward test compiles and matches the numpy mirror at 1e-6 for both the rate-derived energy and
+transport paths). Every new training term is **opt-in / weight-gated** (default 0.0 reproduces the
+prior behaviour exactly); the production defaults are set in [`configs/train_merged.json`](configs/train_merged.json).
+
+| # | Proposal | Where | Tests |
+|---|----------|-------|-------|
+| 1 | Rate-tied energy in the C UDF (+ μ/k `DEFINE_PROPERTY`) | `scarfs/coupling/codegen.py` (`mc_absorption_from_rates`, `mc_h_mass`, `mc_rates_physical`, `_load_energy_thermo`); NASA7 `g`/`s` twins in `scarfs/models/thermo.py` | `test_coupling_codegen.py::TestRateDerivedEnergy`, `::TestCForwardTest`, `::test_transport_property_export_compiles` |
+| 2 | Near-inlet enrichment + composition-curvature storage trigger + Gate E | `scarfs/data/generate.py` (`select_storage_indices`), `scarfs/data/config.py` (`StorageConfig`, `inlet_seed_T_in_range_K`), `scarfs/data/generation_v2.py` (`gate_low_conversion_coverage`, counts) | `test_generation_v2.py` (comp-trigger, gate, T-span) |
+| 3 | Keq equilibrium-consistency penalty (C₂H₆⇌C₂H₄+H₂) | `scarfs/models/thermo.py` (`g_molar`/`g_molar_torch`, a6), `scarfs/training/losses.py` (`keq_consistency_penalty`), closure in `train.py` | `test_physics_augmentation.py`, `test_train_merged_integration.py` |
+| 4 | Element conservation (constant null-space projector) | `scarfs/models/physics.py` (`atom_conservation_projector`), `scarfs/training/losses.py` (`atom_projection_penalty`) | `test_physics_augmentation.py`, `test_models_physics.py` |
+| 5 | μ/k transport heads (model + loss + C export) | `scarfs/models/neuralcoil.py` (`transport`/`set_transport_calibration`), `losses.py` (`transport_property_loss`), `codegen.py` (`DEFINE_PROPERTY`) | `test_physics_augmentation.py`, `test_coupling_codegen.py::test_transport_property_export_compiles` |
+| 6 | In-envelope high-T density (no cap raise) | `scarfs/data/config.py` (`highT_*`), `generation_v2.py` (counts) | `test_generation_v2.py::test_manifest_respects_temperature_cap` |
+| gap-3 | Mixture-averaged Dᵢ columns | `scarfs/data/generation_v2.py` (`keep_d_mix`, `assemble_v2_frame`) | `test_generation_v2.py::test_assemble_v2_frame_emits_diffusivity_when_D_supplied` |
+| gap-5 | Realizability rate floor | `scarfs/training/losses.py` (`realizability_penalty`) | `test_physics_augmentation.py`, `test_train_merged_integration.py` |
+| — | k=8→16 default (ω_Z lever) | `configs/train_merged.json` | `test_training_merged.py::test_config_merged_json_parse` |
+
+**HPC-gated (cannot run locally):** the actual DB regeneration (needs CRACKSIM DLL), full training,
+and the a-posteriori Fluent run. Two honesty gates carry forward to that run: (a) gate retiring the
+distilled-head energy fallback on re-scoring the C rate-derived recompute against the §5 integral
+gate (p95 ≤ 0.10); (b) ablate each new physics term against the E9 baseline before claiming a gain.
+**Not implemented (rejected/deferred — see end of doc):** the rejected five and the low-priority
+deferred items; structural pressure-fall-off and aromatic-growth chemistry remain open coverage gaps.
+
+---
+
 ## The two findings that dominate (both verified in code)
 
 ### Finding 1 — The deployed energy source rides the *worst-trained* head; the good path isn't in the C UDF at all
