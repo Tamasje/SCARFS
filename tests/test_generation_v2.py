@@ -21,10 +21,14 @@ from scarfs.data.generation_v2 import (
     build_v2_manifest,
     ethane_steam_mass_fractions,
     gate_front_resolution,
+    gate_low_conversion_coverage,
     make_piecewise,
     perturb_states,
     to_runner_case,
 )
+from scarfs.data.config import DataGenConfig, StorageConfig
+from scarfs.data.generate import select_storage_indices
+from scarfs.data.sampling import build_cases
 from scarfs.schema import Schema
 
 
@@ -191,7 +195,7 @@ def test_assemble_v2_frame_schema_parses_and_no_pseudo_species():
 
 
 def test_assemble_v2_frame_drops_redundant_families_and_records_provenance():
-    """No R_/wdot_/D_ columns; float64 species data; solver tolerances recorded per row."""
+    """No R_/wdot_/D_ columns by default; float64 species data; solver tolerances recorded per row."""
     # arrange / act
     df = _toy_frame()
     # assert
@@ -201,6 +205,34 @@ def test_assemble_v2_frame_drops_redundant_families_and_records_provenance():
     assert df["solver_rtol"].iloc[0] == pytest.approx(1e-9)
     assert df["generator_version"].iloc[0] == GenV2Settings().generator_version
     assert df["sample_kind"].unique().tolist() == ["trajectory"]
+
+
+def test_assemble_v2_frame_emits_diffusivity_when_D_supplied():
+    """When a D array is passed, D_<species> [m2/s] columns appear and the Schema still parses
+    (D_ is excluded from species — coverage gap 3 / Dᵢ delivery)."""
+    species = ["C2H6", "C2H4", "H2O", "CH3."]
+    rng = np.random.default_rng(5)
+    n = 6
+    runner = {"id": 1, "regime": "body", "mdot": 1.0, "diameter_m": 0.05,
+              "steam_to_ethane_kgkg": 0.43, "T_in": 900.0, "P_in": 2e5,
+              "shape": "uniform", "H_peak": 5e4}
+    df = assemble_v2_frame(
+        species_names=species,
+        Y=rng.dirichlet(np.ones(4), size=n), dYdt=rng.normal(0, 1, (n, 4)),
+        T=np.linspace(900, 1100, n), P=np.full(n, 2e5), rho=np.full(n, 0.6),
+        u=np.full(n, 10.0), tau=np.linspace(0, 0.1, n), z=np.linspace(0, 6, n),
+        cp=np.full(n, 2500.0), cv=np.full(n, 2100.0), mu=np.full(n, 3e-5),
+        k=np.full(n, 0.1), W_mean=np.full(n, 25.0),
+        absorption=np.linspace(1e5, 1e8, n), s_wall=np.full(n, 4e6), q_wall=np.full(n, 5e4),
+        pfr_point_index=np.arange(n), n_points_solved=400,
+        runner_case=runner, settings=GenV2Settings(),
+        inlet_Y={"C2H6": 0.7, "H2O": 0.3},
+        D=np.abs(rng.normal(1e-4, 1e-5, (n, 4))),
+    )
+    d_cols = [c for c in df.columns if c.startswith("D_")]
+    assert d_cols == [f"D_{s} [m2/s]" for s in species]
+    schema = Schema.from_columns(list(df.columns))
+    assert schema.species == ("C2H6", "C2H4", "H2O", "CH3."), "D_ must not become a species"
 
 
 # ---------------------------------------------------------------------------
@@ -394,3 +426,86 @@ def test_min_every_nth_one_halves_stored_jumps_on_steep_front():
     # assert: with min_gap=1 the worst stored jump ≈ one grid step (~8%); min_gap=2 ≈ doubles it
     assert j1 < 0.11, f"min_gap=1 should cap at ~1 grid step, got {j1:.3f}"
     assert j2 > 1.6 * j1, f"min_gap=2 should roughly double the worst jump: {j2:.3f} vs {j1:.3f}"
+
+
+# ---------------------------------------------------------------------------
+# Composition-curvature storage co-trigger (#2: keep the induction zone)
+# ---------------------------------------------------------------------------
+
+def test_comp_trigger_keeps_induction_zone_when_s_e_flat():
+    """With a flat S_E (no |ΔS_E| trigger) but a moving composition, the composition co-trigger
+    stores the induction-zone rows the S_E-only policy would discard."""
+    n = 50
+    s_e = np.full(n, 1.0e6)  # constant -> peak>0, ΔS_E == 0, so the S_E trigger never fires
+    ramp = np.geomspace(1e-6, 1e-1, n)            # a product growing through the induction zone
+    Y = np.column_stack([1.0 - ramp, ramp])       # 2 species, renormalised-ish
+    cfg = StorageConfig(mode="front_adaptive", max_frac_jump=0.03, min_every_nth=1,
+                        comp_arcsinh_jump=1.0, comp_arcsinh_floor=1e-4)
+
+    without = select_storage_indices(s_e, cfg)                  # comp=None -> only first+last
+    with_comp = select_storage_indices(s_e, cfg, comp=Y)
+
+    assert without.tolist() == [0, n - 1], "S_E-only stores nothing in the flat front"
+    assert len(with_comp) > len(without), "composition trigger must keep induction rows"
+    assert with_comp[0] == 0 and with_comp[-1] == n - 1
+
+
+def test_comp_trigger_disabled_by_default_reproduces_legacy():
+    """comp_arcsinh_jump=0.0 (default) ignores the composition argument entirely (legacy)."""
+    n = 30
+    s_e = np.full(n, 5.0e5)
+    Y = np.column_stack([np.linspace(0.9, 0.1, n), np.linspace(0.1, 0.9, n)])
+    cfg = StorageConfig(mode="front_adaptive", max_frac_jump=0.03, min_every_nth=1)  # jump=0.0
+    assert select_storage_indices(s_e, cfg, comp=Y).tolist() == [0, n - 1]
+
+
+# ---------------------------------------------------------------------------
+# Low-conversion coverage gate (Gate E / RC-1)
+# ---------------------------------------------------------------------------
+
+def _inlet_seed_frame(y_c2h6_values, inlet=0.7):
+    n = len(y_c2h6_values)
+    species = ["C2H6", "C2H4", "H2O"]
+    Y = np.column_stack([np.asarray(y_c2h6_values, float),
+                         np.full(n, 0.05), np.full(n, 0.25)])
+    runner = {"id": 2, "regime": "inlet_seed", "mdot": 1.0, "diameter_m": 0.05,
+              "steam_to_ethane_kgkg": 0.43, "T_in": 1000.0, "P_in": 2e5,
+              "shape": "uniform", "H_peak": 3e4}
+    return assemble_v2_frame(
+        species_names=species, Y=Y, dYdt=np.zeros((n, 3)),
+        T=np.full(n, 1000.0), P=np.full(n, 2e5), rho=np.full(n, 0.6),
+        u=np.full(n, 10.0), tau=np.linspace(0, 0.05, n), z=np.linspace(0, 1, n),
+        cp=np.full(n, 2500.0), cv=np.full(n, 2100.0), mu=np.full(n, 3e-5),
+        k=np.full(n, 0.1), W_mean=np.full(n, 25.0),
+        absorption=np.full(n, 1e5), s_wall=np.full(n, 1e6), q_wall=np.full(n, 3e4),
+        pfr_point_index=np.arange(n), n_points_solved=100,
+        runner_case=runner, settings=GenV2Settings(), inlet_Y={"C2H6": inlet, "H2O": 0.3},
+    )
+
+
+def test_low_conversion_gate_passes_with_near_inlet_rows_fails_without():
+    # near-inlet: Y_C2H6 barely below inlet 0.7 -> conversion < 5% on every row -> PASS
+    good = gate_low_conversion_coverage(_inlet_seed_frame([0.70, 0.695, 0.69, 0.688]))
+    assert good["passed"]
+    assert good["inlet_seed_low_conv_frac"] == pytest.approx(1.0)
+    # fully converted inlet_seed rows (Y_C2H6 ~0.3) -> no low-conversion coverage -> FAIL
+    bad = gate_low_conversion_coverage(_inlet_seed_frame([0.30, 0.25, 0.20, 0.15]))
+    assert not bad["passed"]
+    assert bad["inlet_seed_low_conv_frac"] == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# inlet_seed temperature span (#2: cover the high-T / low-conversion corner)
+# ---------------------------------------------------------------------------
+
+def test_inlet_seed_spans_full_temperature_range():
+    """The inlet_seed regime must span the full operating inlet-T envelope (not a low-T band),
+    so the high-T/low-conversion near-wall corner is covered."""
+    cfg = DataGenConfig(n_body_cases=0, n_inlet_seed_cases=64, n_highT_cases=0, n_tail_cases=0,
+                        diameters_m=(0.05,))
+    cases = build_cases(cfg)
+    seed_T = [c["T_in"] for c in cases if c["regime"] == "inlet_seed"]
+    assert seed_T, "no inlet_seed cases generated"
+    assert max(seed_T) > 1250.0, "inlet_seed must reach high inlet T (hot near-wall corner)"
+    assert min(seed_T) < 900.0, "inlet_seed must also cover low inlet T"
+    assert max(seed_T) <= cfg.inlet_seed_T_in_range_K[1] + 1.0

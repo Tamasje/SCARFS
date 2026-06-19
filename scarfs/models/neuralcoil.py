@@ -161,11 +161,14 @@ class MergedCoil(nn.Module):
         energy_hidden: tuple[int, ...] = (64, 64),
         activation: str = "silu",
         spectral_norm: bool = False,
+        n_transport: int = 0,
+        transport_hidden: tuple[int, ...] = (64, 64),
     ) -> None:
         super().__init__()
         self.n_dry = n_dry
         self.n_energy_active = n_energy_active
         self.latent_dim = latent_dim
+        self.n_transport = int(n_transport)
 
         k = latent_dim
         self.encoder = nn.Linear(n_dry, k, bias=False)
@@ -203,6 +206,19 @@ class MergedCoil(nn.Module):
         # Calibration buffers (set by set_energy_calibration after seeing training data)
         self.register_buffer("energy_scale", torch.tensor(1.0))
         self.register_buffer("energy_floor", torch.tensor(0.0))
+
+        # Head 4 (optional): transport properties (μ, k, …) — strictly positive via softplus.
+        # n_transport == 0 disables it entirely (state-dict unchanged for the legacy contract).
+        if self.n_transport > 0:
+            self.transport_net = make_mlp(
+                [k + n_thermo, *transport_hidden, self.n_transport],
+                activation=activation,
+                layernorm=False,
+                final_activation=None,
+                spectral_norm=spectral_norm,
+            )
+            self.register_buffer("transport_scale", torch.ones(self.n_transport))
+            self.register_buffer("transport_floor", torch.zeros(self.n_transport))
 
     # ------------------------------------------------------------------
     # Encoder / decoder / projection
@@ -249,6 +265,19 @@ class MergedCoil(nn.Module):
         raw = self._energy_raw(z, q)
         return torch.nn.functional.softplus(raw) * self.energy_scale + self.energy_floor
 
+    def transport(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+        """Strictly-positive transport properties ``(B, n_transport)`` via softplus + calibration.
+
+        ``property = softplus(raw) * transport_scale + transport_floor`` — the same C-expressible
+        template as the absorption head, one extra net+softplus per cell (cheap).  Column order is
+        whatever the trainer fed targets in (μ, k, …).  Raises if the head was not built
+        (``n_transport == 0``).
+        """
+        if self.n_transport <= 0:
+            raise RuntimeError("MergedCoil.transport called but n_transport == 0 (head not built).")
+        raw = self.transport_net(torch.cat([z, q], dim=-1))      # (B, n_transport)
+        return torch.nn.functional.softplus(raw) * self.transport_scale + self.transport_floor
+
     # ------------------------------------------------------------------
     # Calibration
     # ------------------------------------------------------------------
@@ -266,6 +295,25 @@ class MergedCoil(nn.Module):
         """
         self.energy_scale.fill_(float(scale))
         self.energy_floor.fill_(float(floor))
+
+    def set_transport_calibration(self, scale, floor=None) -> None:
+        """Set per-property calibration for the transport head.
+
+        Parameters
+        ----------
+        scale
+            ``(n_transport,)`` typical magnitudes (e.g. train medians of μ, k, …) so the softplus
+            output is numerically comparable to each property before training.
+        floor
+            ``(n_transport,)`` minimum guaranteed outputs (default zeros).
+        """
+        if self.n_transport <= 0:
+            raise RuntimeError("set_transport_calibration called but n_transport == 0.")
+        s = torch.as_tensor(scale, dtype=self.transport_scale.dtype).reshape(-1)
+        self.transport_scale.copy_(s)
+        if floor is not None:
+            f = torch.as_tensor(floor, dtype=self.transport_floor.dtype).reshape(-1)
+            self.transport_floor.copy_(f)
 
     # ------------------------------------------------------------------
     # PCA initialisation helper

@@ -56,7 +56,9 @@ from .sampling import build_cases, coverage_summary
 # Storage index selection
 # ---------------------------------------------------------------------------
 
-def select_storage_indices(s_e: np.ndarray, cfg: StorageConfig) -> np.ndarray:
+def select_storage_indices(
+    s_e: np.ndarray, cfg: StorageConfig, comp: np.ndarray | None = None
+) -> np.ndarray:
     """Return the subset of point indices to store for a single reactor case.
 
     This is a **pure function** with no side effects — it can be unit-tested
@@ -69,6 +71,13 @@ def select_storage_indices(s_e: np.ndarray, cfg: StorageConfig) -> np.ndarray:
         case trajectory (one entry per solved PFR grid point, in order).
     cfg
         Storage configuration controlling the mode and thresholds.
+    comp
+        Optional ``(n_points, n_species)`` composition (mass fractions) along the trajectory.
+        When supplied AND ``cfg.comp_arcsinh_jump > 0`` (front_adaptive only), a point is also
+        stored whenever any species' change in ``arcsinh(Y / cfg.comp_arcsinh_floor)`` since the
+        last stored point exceeds ``cfg.comp_arcsinh_jump`` — this keeps the radical-chain
+        INDUCTION zone (composition moving, |S_E| still ~0) that the S_E-only policy discards
+        (the RC-1 near-inlet coverage fix).
 
     Returns
     -------
@@ -83,12 +92,11 @@ def select_storage_indices(s_e: np.ndarray, cfg: StorageConfig) -> np.ndarray:
 
     **Front-adaptive mode** (``cfg.mode == "front_adaptive"``)
         Stores a point at index *i* when the absolute change in *s_e* from
-        the last stored index exceeds ``cfg.max_frac_jump × peak``, where
-        ``peak = max(|s_e|)`` over the full case.  The first and last points
-        are always stored.  A minimum inter-point spacing of ``cfg.min_every_nth``
-        is enforced: if fewer than ``cfg.min_every_nth - 1`` points have elapsed
-        since the last stored point, the candidate point is skipped (size cap).
-        When *s_e* is all-zero, every ``cfg.min_every_nth``-th point is stored.
+        the last stored index exceeds ``cfg.max_frac_jump × peak`` (``peak = max(|s_e|)``),
+        OR — when *comp* is given — when the composition-curvature co-trigger fires.  The first
+        and last points are always stored, and the ``cfg.min_every_nth`` size cap applies to both
+        triggers.  When *s_e* is all-zero and no composition trigger is active, every
+        ``cfg.min_every_nth``-th point is stored.
 
     Raises
     ------
@@ -112,6 +120,11 @@ def select_storage_indices(s_e: np.ndarray, cfg: StorageConfig) -> np.ndarray:
     threshold = cfg.max_frac_jump * peak if peak > 0.0 else 0.0
     min_gap = int(cfg.min_every_nth)  # must have elapsed ≥ min_gap points between stores
 
+    use_comp = comp is not None and getattr(cfg, "comp_arcsinh_jump", 0.0) > 0.0
+    if use_comp:
+        comp_t = np.arcsinh(np.asarray(comp, dtype=float) / cfg.comp_arcsinh_floor)  # (n, n_species)
+        comp_jump = float(cfg.comp_arcsinh_jump)
+
     stored: list[int] = [0]  # always store first
     last_stored_val = float(s_e[0])
     last_stored_idx = 0
@@ -121,7 +134,11 @@ def select_storage_indices(s_e: np.ndarray, cfg: StorageConfig) -> np.ndarray:
         if (i - last_stored_idx) < min_gap:
             continue
         delta = abs(float(s_e[i]) - last_stored_val)
-        if peak == 0.0 or delta > threshold:
+        fire = peak == 0.0 or delta > threshold
+        if not fire and use_comp:
+            comp_move = float(np.max(np.abs(comp_t[i] - comp_t[last_stored_idx])))
+            fire = comp_move > comp_jump
+        if fire:
             stored.append(i)
             last_stored_val = float(s_e[i])
             last_stored_idx = i

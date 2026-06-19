@@ -77,6 +77,16 @@ class StorageConfig:
     every_nth: int = 5
     max_frac_jump: float = 0.03
     min_every_nth: int = 20
+    #: Composition-curvature co-trigger (front_adaptive mode). In addition to the |ΔS_E| trigger,
+    #: store a point when any species' change in ``arcsinh(Y / comp_arcsinh_floor)`` since the last
+    #: stored point exceeds ``comp_arcsinh_jump``.  This keeps the radical-chain INDUCTION zone —
+    #: where the composition moves sharply but |S_E| is still near zero, so the S_E-only policy
+    #: discards exactly the near-inlet rows RC-1 needs (DIAGNOSIS.md:62-69).  0.0 disables it
+    #: (legacy behaviour); ~1.0 is a moderate setting.
+    comp_arcsinh_jump: float = 0.0
+    #: Scale inside the arcsinh of the composition co-trigger.  A floor of 1e-4 makes only species
+    #: that reach non-trace levels contribute, so trace-radical noise does not blow up the row count.
+    comp_arcsinh_floor: float = 1.0e-4
 
     def __post_init__(self) -> None:
         if self.mode not in ("stride", "front_adaptive"):
@@ -92,6 +102,14 @@ class StorageConfig:
         if self.min_every_nth < 1:
             raise ValueError(
                 f"StorageConfig.min_every_nth must be >= 1, got {self.min_every_nth}."
+            )
+        if self.comp_arcsinh_jump < 0.0:
+            raise ValueError(
+                f"StorageConfig.comp_arcsinh_jump must be >= 0, got {self.comp_arcsinh_jump}."
+            )
+        if self.comp_arcsinh_floor <= 0.0:
+            raise ValueError(
+                f"StorageConfig.comp_arcsinh_floor must be > 0, got {self.comp_arcsinh_floor}."
             )
 
 
@@ -156,13 +174,19 @@ class DataGenConfig:
     n_inlet_seed_cases: int = 240
     inlet_seed_L_range_m: tuple[float, float] = (0.3, 1.5)
     inlet_seed_H_peak_range_W_m2: tuple[float, float] = (10.0e3, 80.0e3)
+    #: Inlet temperature range for the inlet-seed regime — deliberately spans the FULL operating
+    #: envelope (not a low-T band) so the high-T/low-conversion corner (cold composition + hot gas,
+    #: the near-wall ignition-delay state driving the CFD freeze) is covered.  Short L + low H_peak
+    #: keep integrated severity low (X_C2H6 < 5%) even at high inlet T.  RC-1 fix (workflow #2).
+    inlet_seed_T_in_range_K: tuple[float, float] = (550.0 + C_TO_K, 1100.0 + C_TO_K)
 
     # -- F4: high-T near-wall enrichment ----------------------------------------------------
-    #: Hot, short-residence cases approaching (but not exceeding) the mechanism cap, to cover the
-    #: near-wall states the 1-D bulk PFR misses.
+    #: Hot, short-residence cases approaching (but not exceeding) the mechanism cap, to densify the
+    #: 1223–1423 K bulk-T window the 1-D bulk PFR misses.  Higher H_peak + short L drive bulk T
+    #: toward the cap (NO cap raise — the per-row T>cap drop stays the hard guard).  RC-4 (workflow #6).
     n_highT_cases: int = 120
-    highT_T_in_range_K: tuple[float, float] = (820.0 + C_TO_K, 950.0 + C_TO_K)
-    highT_H_peak_range_W_m2: tuple[float, float] = (150.0e3, 200.0e3)
+    highT_T_in_range_K: tuple[float, float] = (820.0 + C_TO_K, 1000.0 + C_TO_K)
+    highT_H_peak_range_W_m2: tuple[float, float] = (150.0e3, 250.0e3)
     highT_L_range_m: tuple[float, float] = (1.0, 3.0)
 
     # -- E-c tail enrichment (high-|S_E| cases per §4 / E-c) --------------------------------
