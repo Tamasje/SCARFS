@@ -65,6 +65,10 @@ EXPERIMENTS = {
     "combo_eck":  lambda c: (_set(c.model, latent_dim=32, rate_hidden=(256, 256, 128)),
                              _set(c.loss, energy_weight=1.0), _set(c.data, tail_weight_alpha=4.0),
                              _set(c.optim, checkpoint_metric="energy_relrmse")),
+    # --- regularization to close the val<->test overfitting gap (data-limited pilot) ---
+    "combo_eck_wd": lambda c: (_set(c.model, latent_dim=32, rate_hidden=(256, 256, 128)),
+                               _set(c.loss, energy_weight=1.0), _set(c.data, tail_weight_alpha=4.0),
+                               _set(c.optim, checkpoint_metric="energy_relrmse", weight_decay=1e-4)),
 }
 
 

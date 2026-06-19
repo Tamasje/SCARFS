@@ -68,11 +68,27 @@ Physical/chemical (code-level, next):
 | **combo** | 400 | 0.126 | **2.69×** | 0.983 | 0.996 | **0.67** | training budget is the dominant lever; not plateaued |
 | combo_cos | 400 | 0.123 | 2.77× | 0.984 | 0.996 | 0.29 | cosine ~3% on energy; hurt ω_Z |
 
-**Read so far:** (1) the architecture levers (k32, capacity, tail/energy weighting) compound to 1.60×
-at fixed budget; (2) **training budget dominates** — `combo` 0.212→0.126 from 100→400 epochs with no
-early-stop, and ω_Z climbs 0.08→0.67 (it was just under-trained); (3) cosine LR is marginal. Next:
-matched-budget reference (`baseline_ref`@400) to separate "longer training" from "architecture",
-and `combo`@800 to find the floor.
+### ⚠ Honesty correction (test split) — the val ledger above is optimistically biased
+
+The pilot is small (1208 cases); the **val** split turned out *easy* and the checkpoint is *selected*
+on val, so the val relRMSE overstates generalization. The unbiased number is the fully-held-out **15%
+TEST** cases (never in training OR checkpoint selection). `scripts/goal_test_eval.py` computes it; my
+eval reproduces training's val exactly (0.0377 / 0.0634), so the gap below is real, not a bug:
+
+| config | val relRMSE | **TEST relRMSE** | **test factor** | test R² |
+|---|--:|--:|--:|--:|
+| baseline (k16, 100ep) | 0.340 | 0.539 | 1.00× | — |
+| baseline_ref (k16, 400ep) | 0.177 | **0.548** | 0.98× | — | ← training k16 longer **overfits** on test |
+| combo (800ep, total ckpt) | 0.063 | 0.220 | 2.45× | 0.950 |
+| **combo_eck (energy ckpt)** | 0.038 | **0.167** | **3.24×** | 0.972 |
+
+**Honest read:** the real improvement is **3.24×** (not the 9× val suggested). The gains that *generalize*
+are **architecture (k32+capacity+tail/energy weighting)** and **energy-relRMSE checkpointing** — NOT
+training budget (the k16 baseline *overfit* when trained longer). The large val↔test gap (0.04 vs 0.17)
+means the pilot is **data-limited/overfitting**, so the path to 10× runs through **more data**
+(off-manifold augmentation now; the regenerated front-resolved DB at HPC) and **regularization**, not
+more architecture tricks. Testing both (batch 6): `combo_eck_wd` (weight decay) and `combo_eck_aug`
+(+60k off-manifold rows). All factors hereafter are **test-split**.
 
 ## Stopping criterion
 
