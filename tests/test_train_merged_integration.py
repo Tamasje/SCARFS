@@ -120,3 +120,49 @@ def test_train_merged_end_to_end_on_stride6_fixture(tmp_path):
 
     # held-out test cases recorded for the benchmark layer
     assert len(metrics["split_case_ids"]["test"]) >= 1
+
+
+def test_train_merged_with_physics_augmentation(tmp_path):
+    """The merged path runs end-to-end with the new physics terms enabled (atom-projection,
+    Keq equilibrium consistency, realizability) and reports each as a finite loss term."""
+    # arrange
+    df = load_database(FIXTURE)
+    schema = infer_schema(df)
+    seed = _non_degenerate_seed(df, schema, val_fraction=0.3, test_fraction=0.25)
+    cfg = TrainConfig(
+        data=DataConfig(
+            database_path=str(FIXTURE),
+            input_species="dry_all",
+            target_species="energy_active",
+            val_fraction=0.3,
+            test_fraction=0.25,
+            split_by_case=True,
+            energy_active_coverage=0.999,
+            mech_yaml=str(MECH_YAML),
+            seed=seed,
+        ),
+        model=ModelConfig(
+            kind="merged", latent_dim=2,
+            decoder_hidden=(16,), rate_hidden=(16,),
+            latent_source_hidden=(16,), energy_hidden=(8,),
+        ),
+        optim=OptimConfig(lr=1e-3, epochs=2, batch_size=256, patience=5),
+        loss=LossConfig(
+            atom_projection_weight=5e-3,
+            keq_weight=1e-2,
+            keq_width=1.0,
+            realizability_weight=1e-2,
+            realizability_dt=1e-3,
+        ),
+        output_dir=str(tmp_path / "run"),
+    )
+
+    # act
+    metrics = train(cfg)
+
+    # assert — the new physics terms ran and stayed finite
+    assert np.isfinite(metrics["best_val"])
+    last_parts = metrics["history"][-1]["train_parts"]
+    for term in ("atom_projection", "keq", "realizability"):
+        assert term in last_parts, f"{term!r} missing: {sorted(last_parts)}"
+        assert np.isfinite(last_parts[term]), f"{term!r} not finite"

@@ -90,6 +90,12 @@ class ModelConfig:
     energy_hidden: tuple[int, ...] = (64, 64)
     #: Apply spectral normalisation to all linear layers in the merged model.
     spectral_norm: bool = False
+    #: Number of transport-property head outputs (0 disables the head). 2 = (μ, k); the trainer
+    #: builds matching DB targets in that column order. Per-species diffusivity D_i is delivered as
+    #: data columns (see DataGenConfig) and is a documented UDS-coupling follow-up, not a head output.
+    transport_outputs: int = 0
+    #: Hidden widths for the transport-property head.
+    transport_hidden: tuple[int, ...] = (64, 64)
 
 
 @dataclass
@@ -133,6 +139,24 @@ class LossConfig:
     """
 
     atom_balance_weight: float = 0.0     # soft elemental-conservation penalty (needs element data)
+    #: Element conservation via the CONSTANT null-space projector (physics.atom_conservation_projector);
+    #: better-conditioned than atom_balance_weight. Penalises ‖r_molar·Q‖² (a-priori/training only —
+    #: the deployed UDF exports no per-species rate source). 0.0 disabled; ~5e-3 recommended.
+    atom_projection_weight: float = 0.0
+    #: Keq equilibrium-consistency penalty for the C2H6<->C2H4+H2 dehydrogenation (drives the step's
+    #: net extent rate -> 0 as the reaction quotient approaches Keq(T), using NASA7 a6 entropy).
+    #: Scoped, opt-in, OFF by default (0.0); ~1e-2 if enabled. See losses.keq_consistency_penalty.
+    keq_weight: float = 0.0
+    #: Gaussian width ε (ln-units) of the near-equilibrium weighting for the Keq penalty.
+    keq_width: float = 1.0
+    #: Realizability floor: penalise consumption rates that would deplete a species within
+    #: ``realizability_dt`` (losses.realizability_penalty). 0.0 disabled; ~1e-2 if enabled.
+    realizability_weight: float = 0.0
+    #: Representative timestep [s] over which the realizability depletion bound is applied.
+    realizability_dt: float = 1.0e-3
+    #: Transport-property head loss (log-space MSE on μ, k against DB columns). Needs
+    #: ``ModelConfig.transport_outputs > 0``. 0.0 disabled; ~0.05 if enabled.
+    transport_weight: float = 0.0
     recon_weight: float = 1.0            # NeuralCoil/merged decoder reconstruction
     manifold_weight: float = 0.1         # NeuralCoil/merged manifold-consistency (F2)
     noise_std: float = 0.0               # latent noise injection during training (F2)
@@ -179,7 +203,7 @@ class TrainConfig:
         model_d = dict(d.get("model", {}))
         _tuple_fields_model = (
             "hidden", "decoder_hidden", "rate_hidden",
-            "latent_source_hidden", "energy_hidden",
+            "latent_source_hidden", "energy_hidden", "transport_hidden",
         )
         for f in _tuple_fields_model:
             if f in model_d and isinstance(model_d[f], list):

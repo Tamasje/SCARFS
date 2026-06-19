@@ -111,6 +111,8 @@ def _build_merged_model(cfg: TrainConfig, spec: FeatureSpec):
         energy_hidden=tuple(cfg.model.energy_hidden),
         activation=cfg.model.activation,
         spectral_norm=cfg.model.spectral_norm,
+        n_transport=cfg.model.transport_outputs,
+        transport_hidden=tuple(cfg.model.transport_hidden),
     )
 
 
@@ -454,12 +456,39 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
         dtype=torch.float32, device=device,
     )
     molar_mass_t = element_matrix_t = None
-    if cfg.loss.atom_balance_weight > 0.0:
+    if cfg.loss.atom_balance_weight > 0.0 or cfg.loss.atom_projection_weight > 0.0:
         mm = extras.get("molar_mass")
         em = extras.get("element_matrix")
-        if mm is not None and em is not None:
+        if mm is not None:
             molar_mass_t = torch.as_tensor(mm, dtype=torch.float32, device=device)
+        if em is not None:
             element_matrix_t = torch.as_tensor(em, dtype=torch.float32, device=device)
+
+    # -- physics-augmentation tensors (all opt-in; None when their weight is 0) -------------
+    nonconserving_proj_t = None
+    if cfg.loss.atom_projection_weight > 0.0:
+        Q = extras.get("atom_nonconserving_projector")
+        if Q is not None:
+            nonconserving_proj_t = torch.as_tensor(Q, dtype=torch.float32, device=device)
+
+    comp_mean_active_t = None
+    if cfg.loss.realizability_weight > 0.0:
+        cma = extras.get("comp_mean_active")
+        if cma is not None:
+            comp_mean_active_t = torch.as_tensor(cma, dtype=torch.float32, device=device)
+
+    transport_targets_t = None
+    if cfg.loss.transport_weight > 0.0:
+        tt = extras.get(f"transport_target_{split}")
+        if tt is not None:
+            transport_targets_t = torch.as_tensor(tt[sel], dtype=torch.float32, device=device)
+
+    keq_fn = extras.get("keq_penalty_fn") if cfg.loss.keq_weight > 0.0 else None
+    keq_n_total_t = None
+    if keq_fn is not None:
+        nt = extras.get(f"n_total_{split}")
+        if nt is not None:
+            keq_n_total_t = torch.as_tensor(nt[sel], dtype=torch.float32, device=device)
 
     # Lagrangian pairs (if any) – train-split indices only; never applied during val epochs
     lagrangian_idx_t = lagrangian_idx_tp1 = lagrangian_dtau = None
@@ -510,6 +539,11 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
         qoi_recon_weight=cfg.loss.qoi_recon_weight,
         manifold_weight=cfg.loss.manifold_weight,
         atom_balance_weight=cfg.loss.atom_balance_weight,
+        atom_projection_weight=cfg.loss.atom_projection_weight,
+        keq_weight=cfg.loss.keq_weight,
+        realizability_weight=cfg.loss.realizability_weight,
+        realizability_dt=cfg.loss.realizability_dt,
+        transport_weight=cfg.loss.transport_weight,
         noise_std=cfg.loss.noise_std,
         rollout_mode=cfg.loss.rollout_mode,
         idx_t=lagrangian_idx_t,
@@ -517,6 +551,11 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
         dtau=lagrangian_dtau,
         molar_mass=molar_mass_t,
         element_matrix=element_matrix_t,
+        atom_nonconserving_projector=nonconserving_proj_t,
+        keq_penalty_fn=keq_fn,
+        keq_n_total=keq_n_total_t,
+        comp_mean_active=comp_mean_active_t,
+        transport_targets=transport_targets_t,
         absorption_from_rates_fn=abs_fn,
     )
 
@@ -751,8 +790,127 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         lag_pairs = None
     bundle.lagrangian_pairs = lag_pairs
 
+    # ---- physics-augmentation extras (atom projection, transport heads, Keq, realizability) ----
+    from ..models.physics import atom_conservation_projector
+    from ..schema import y_column as _y_col
+
+    comp_mean_all = np.asarray(linear_comp_scaler.mean_, dtype=float)
+    comp_mean_active = comp_mean_all[ea_col_idx]
+
+    # constant atom-conservation projector over the active-species element matrix (#4 tier 2)
+    atom_nonconserving_projector = atom_conservation_projector(thermo_active.element_matrix)
+
+    # transport-property targets (μ, k) + head calibration (#5)
+    transport_target_train = transport_target_val = None
+    if cfg.model.transport_outputs and cfg.model.transport_outputs > 0:
+        try:
+            mu_col = schema.state["mu"]
+            k_col = schema.state["k"]
+            transport_target_train = np.column_stack(
+                [df_train[mu_col].to_numpy(dtype=float), df_train[k_col].to_numpy(dtype=float)]
+            )
+            if len(df_val):
+                transport_target_val = np.column_stack(
+                    [df_val[mu_col].to_numpy(dtype=float), df_val[k_col].to_numpy(dtype=float)]
+                )
+            if cfg.model.transport_outputs != 2:
+                warnings.warn(
+                    f"transport_outputs={cfg.model.transport_outputs} but only (μ, k) targets are "
+                    "available; the head will train on 2 columns. Set transport_outputs=2."
+                )
+            med = np.median(np.clip(transport_target_train, 1e-30, None), axis=0)
+            if hasattr(model, "set_transport_calibration"):
+                model.set_transport_calibration(med)
+        except (KeyError, ValueError) as exc:
+            warnings.warn(f"transport heads enabled but μ/k columns unavailable ({exc}); disabling.")
+            transport_target_train = transport_target_val = None
+
+    # Keq equilibrium-consistency closure scoped to C2H6 <-> C2H4 + H2 (#3)
+    keq_penalty_fn = None
+    n_total_train = n_total_val = None
+    if cfg.loss.keq_weight and cfg.loss.keq_weight > 0.0:
+        keq_species = ("C2H6", "C2H4", "H2")
+        ok = (all(s in all_dry_list for s in keq_species)
+              and all(s in energy_active for s in keq_species) and schema.has_dydt())
+        if not ok:
+            warnings.warn("keq_weight>0 but C2H6/C2H4/H2 not all in dry+active set; Keq term disabled.")
+        else:
+            from ..models.thermo import SpeciesThermo as _ST
+            from ..models.thermo import R_J_PER_KMOL_K as _R
+            thermo_keq = _ST.from_mechanism_yaml(cfg.data.mech_yaml, list(keq_species))
+            keq_dry_idx = np.array([all_dry_list.index(s) for s in keq_species], dtype=np.intp)
+            keq_active_idx = np.array([list(energy_active).index(s) for s in keq_species], dtype=np.intp)
+            W_keq = np.asarray(thermo_keq.molar_mass, dtype=float)
+            mean_keq = comp_mean_all[keq_dry_idx]
+            sig_keq = sigma_comp_all[keq_dry_idx]
+            p_mean = float(bundle.scalers.thermo.mean_[1])
+            p_scale = float(bundle.scalers.thermo.scale_[1])
+            stoich_np = np.array([-1.0, 1.0, 1.0], dtype=float)  # C2H6 -> C2H4 + H2
+
+            # total molar density Σ Y_j/W_j [kmol/kg] over all species with a known W (incl water);
+            # the ~20 thermo-less species carry negligible mass (Phase-1) and are omitted.
+            W_by_species = dict(zip(thermo_dry.species, np.asarray(thermo_dry.molar_mass, dtype=float)))
+            W_by_species.setdefault("H2O", 18.01528)
+
+            def _n_total(dfx):
+                acc = np.zeros(len(dfx), dtype=float)
+                for s, w in W_by_species.items():
+                    col = _y_col(s)
+                    if col in dfx.columns and w > 0:
+                        acc += dfx[col].to_numpy(dtype=float) / w
+                return np.maximum(acc, 1e-30)
+
+            n_total_train = _n_total(df_train)
+            n_total_val = _n_total(df_val) if len(df_val) else None
+
+            # extent-rate normaliser from the TRUE molar rates of the 3 species on train
+            dydt_keq_true = df_train[schema.dydt_columns(list(keq_species))].to_numpy(dtype=float)
+            omega_true = (rho_train.reshape(-1, 1) * dydt_keq_true) / W_keq[None, :]
+            xi_true = (omega_true * stoich_np[None, :]).sum(1) / (stoich_np ** 2).sum()
+            extent_scale = float(np.median(np.abs(xi_true))) or 1.0
+
+            _kc = dict(
+                thermo_keq=thermo_keq, dry_idx=keq_dry_idx, active_idx=keq_active_idx, W=W_keq,
+                mean=mean_keq, sig=sig_keq, stoich=stoich_np, extent_scale=extent_scale,
+                t_mean=t_mean, t_scale=t_scale, p_mean=p_mean, p_scale=p_scale,
+                width=cfg.loss.keq_width, R=_R,
+            )
+
+            def _keq_penalty(rates_phys, y_std, q, rho_b, n_total_b, _c=_kc):
+                import torch as _T
+                from . import losses as _L
+                dev = y_std.device
+                Tk = q[..., 0] * _c["t_scale"] + _c["t_mean"]
+                Pk = q[..., 1] * _c["p_scale"] + _c["p_mean"]
+                sig = _T.as_tensor(_c["sig"], dtype=_T.float32, device=dev)
+                mean = _T.as_tensor(_c["mean"], dtype=_T.float32, device=dev)
+                dry_idx = _T.as_tensor(_c["dry_idx"], dtype=_T.long, device=dev)
+                act_idx = _T.as_tensor(_c["active_idx"], dtype=_T.long, device=dev)
+                W = _T.as_tensor(_c["W"], dtype=_T.float32, device=dev)
+                stoich = _T.as_tensor(_c["stoich"], dtype=_T.float32, device=dev)
+                Y3 = (y_std[:, dry_idx] * sig + mean).clamp(min=1e-12)           # mass fractions
+                n_i = Y3 / W                                                     # kmol/kg
+                X = (n_i / n_total_b.unsqueeze(1)).clamp(min=1e-12)             # mole fractions
+                lnQ = (_T.log(X[:, 1]) + _T.log(X[:, 2]) - _T.log(X[:, 0])
+                       + _T.log((Pk / 101325.0).clamp(min=1e-30)))
+                g3 = _c["thermo_keq"].g_molar_torch(Tk)                          # (batch,3) J/kmol
+                dG = g3[:, 1] + g3[:, 2] - g3[:, 0]
+                lnKeq = -dG / (_c["R"] * Tk.clamp(min=1.0))
+                omega_molar = rates_phys[:, act_idx] / W                         # kmol/m3/s
+                return _L.keq_consistency_penalty(
+                    omega_molar, lnQ, lnKeq, stoich, _c["extent_scale"], _c["width"])
+
+            keq_penalty_fn = _keq_penalty
+
     # store merged extras on bundle (split-local arrays keyed _train / _val)
     bundle._merged_extras = {
+        "comp_mean_active": comp_mean_active,
+        "atom_nonconserving_projector": atom_nonconserving_projector,
+        "transport_target_train": transport_target_train,
+        "transport_target_val": transport_target_val,
+        "keq_penalty_fn": keq_penalty_fn,
+        "n_total_train": n_total_train,
+        "n_total_val": n_total_val,
         "rate_scaler": rate_scaler,
         "absorption_target_train": absorption_train,
         "absorption_target_val": absorption_val,

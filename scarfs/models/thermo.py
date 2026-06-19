@@ -255,6 +255,41 @@ class SpeciesThermo:
         """Mass-specific heat capacities [J/(kg·K)] → ``(n, n_species)``."""
         return self.cp_molar(T) / self.molar_mass[None, :]
 
+    def s_molar(self, T: np.ndarray) -> np.ndarray:
+        """Standard-state molar entropies [J/(kmol·K)] at temperatures *T* → ``(n, n_species)``.
+
+        NASA7 entropy form (uses the a6 coefficient, parsed but unused by h/cp)::
+
+            s/R = a0·ln T + a1·T + a2·T²/2 + a3·T³/3 + a4·T⁴/4 + a6
+
+        Returned at the standard reference pressure (1 atm) — the convention NASA7 polynomials
+        are fitted against; the pressure (mole-fraction) correction is applied by the caller
+        when forming a reaction quotient.
+        """
+        T = np.asarray(T, dtype=float).reshape(-1)
+        a = self._select_coeffs(T)              # (n, n_species, 7)
+        a0, a1, a2, a3, a4 = [a[:, :, i] for i in range(5)]
+        a6 = a[:, :, 6]
+        T_ = T[:, None]
+        s_r = (
+            a0 * np.log(np.maximum(T_, 1e-300))
+            + a1 * T_
+            + a2 * T_**2 / 2.0
+            + a3 * T_**3 / 3.0
+            + a4 * T_**4 / 4.0
+            + a6
+        )
+        return R_J_PER_KMOL_K * s_r
+
+    def g_molar(self, T: np.ndarray) -> np.ndarray:
+        """Standard-state molar Gibbs free energies ``g° = h − T·s`` [J/kmol] → ``(n, n_species)``.
+
+        Used to form the equilibrium constant of an elementary step:
+        ``ln Kp = −Σ νᵢ·g°ᵢ / (R·T)`` (νᵢ stoichiometric coefficients).
+        """
+        T = np.asarray(T, dtype=float).reshape(-1)
+        return self.h_molar(T) - T[:, None] * self.s_molar(T)
+
     # ------------------------------------------------------------------
     # Absorption (NumPy)
     # ------------------------------------------------------------------
@@ -320,6 +355,34 @@ class SpeciesThermo:
             + a5 / T_.clamp(min=1e-300)
         )
         return (R_J_PER_KMOL_K * T_ * h_rt) / mw.unsqueeze(0)
+
+    def g_molar_torch(self, T):  # T: torch.Tensor
+        """Differentiable standard-state molar Gibbs energy ``g° = h − T·s`` [J/kmol].
+
+        Returns an ``(n, n_species)`` tensor.  Mirrors :meth:`g_molar` (NumPy) and uses the
+        NASA7 ``a6`` entropy coefficient.  Standard reference pressure (1 atm); the caller adds
+        the mole-fraction / pressure term when forming a reaction quotient (see
+        :func:`scarfs.training.losses.keq_consistency_penalty`).
+        """
+        import torch
+
+        T_ = T.reshape(-1, 1).float()
+        t_mid = torch.as_tensor(self._t_mid, dtype=torch.float32, device=T.device)
+        cl = torch.as_tensor(self._coeffs_low, dtype=torch.float32, device=T.device)
+        ch = torch.as_tensor(self._coeffs_high, dtype=torch.float32, device=T.device)
+
+        use_high = T_ > t_mid.unsqueeze(0)
+        a = torch.where(use_high.unsqueeze(-1), ch.unsqueeze(0), cl.unsqueeze(0))
+        a0, a1, a2, a3, a4, a5, a6 = (a[..., i] for i in range(7))
+        h_rt = (
+            a0 + a1 * T_ / 2.0 + a2 * T_**2 / 3.0 + a3 * T_**3 / 4.0
+            + a4 * T_**4 / 5.0 + a5 / T_.clamp(min=1e-300)
+        )
+        s_r = (
+            a0 * torch.log(T_.clamp(min=1e-300)) + a1 * T_ + a2 * T_**2 / 2.0
+            + a3 * T_**3 / 3.0 + a4 * T_**4 / 4.0 + a6
+        )
+        return R_J_PER_KMOL_K * T_ * (h_rt - s_r)
 
     def absorption_from_rates_torch(self, rate_mass, T):
         """Differentiable heat absorption  Σ rate_mass_i · h_mass_i.

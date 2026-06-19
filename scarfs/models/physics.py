@@ -131,6 +131,44 @@ def project_conserve_atoms(
     return r_corr * W[None, :]
 
 
+def atom_conservation_projector(element_matrix: np.ndarray) -> np.ndarray:
+    """Constant orthogonal projector onto the NON-atom-conserving subspace of molar rates.
+
+    For an element matrix ``A`` (``(n_species, n_elements)``, atoms per molecule), a molar
+    rate vector ``r`` conserves elements iff ``Aᵀ·r = 0`` — i.e. ``r`` lies in the null space
+    of ``Aᵀ``, orthogonal to ``col(A)``.  The orthogonal projector onto ``col(A)`` is::
+
+        Q = A · (AᵀA)⁺ · Aᵀ            (n_species × n_species, symmetric, idempotent)
+
+    so ``r @ Q`` is the element-*violating* component of ``r`` and ``‖r @ Q‖²`` is its squared
+    L2 distance from the atom-conserving subspace.
+
+    Unlike :func:`project_conserve_atoms` (a per-row ``lstsq`` solve), ``Q`` is a single
+    **constant** matrix: it can be applied as one differentiable matmul in a training penalty
+    and is trivially expressible in C.  The complement ``P = I − Q`` projects ONTO the conserving
+    subspace; ``r @ P`` is the minimal-L2 atom-conserving correction of ``r`` (identical to
+    :func:`project_conserve_atoms` when ``A`` spans all atom carriers).
+
+    Computed via the pseudo-inverse of ``AᵀA`` so a rank-deficient element set (a truncated
+    active species subset) is handled gracefully — closure is then exact only on the carriers
+    present (documented limitation, RC-3; the loss treats it as a consistency pressure).
+
+    Parameters
+    ----------
+    element_matrix
+        ``(n_species, n_elements)`` atoms of each element per molecule.
+
+    Returns
+    -------
+    ``(n_species, n_species)`` non-conserving projector ``Q``.  ``I − Q`` is the conserving one.
+    """
+    A = np.asarray(element_matrix, dtype=float)          # (n_species, n_elements)
+    AtA = A.T @ A                                         # (n_elements, n_elements)
+    Q = A @ np.linalg.pinv(AtA) @ A.T                     # (n_species, n_species)
+    # Symmetrise to kill floating-point asymmetry (Q is symmetric by construction).
+    return 0.5 * (Q + Q.T)
+
+
 def element_data_from_cantera(mech_path: str, species: list[str]):
     """Return ``(molar_mass, element_matrix, element_names)`` for *species* (Cantera, HPC only).
 

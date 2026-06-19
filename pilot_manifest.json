@@ -1,0 +1,29 @@
+{
+  "tier": "pilot",
+  "seed": 20260612,
+  "n_cases": 1230,
+  "regime_counts": {
+    "body": 720,
+    "inlet_seed": 150,
+    "high_T": 150,
+    "tail": 120,
+    "deep_conversion": 90
+  },
+  "t_max_K": 1423.15,
+  "generator_version": "v2.0",
+  "settings": {
+    "n_points": 400,
+    "solver_rtol": 1e-09,
+    "solver_atol": 1e-16,
+    "t_max_K": 1423.15,
+    "storage": {
+      "mode": "front_adaptive",
+      "every_nth": 5,
+      "max_frac_jump": 0.03,
+      "min_every_nth": 1
+    },
+    "case_timeout_s": 900.0,
+    "keep_d_mix": false,
+    "generator_version": "v2.0"
+  }
+}
