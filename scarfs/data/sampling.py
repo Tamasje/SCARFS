@@ -226,7 +226,7 @@ def build_cases(config: DataGenConfig | None = None) -> list[dict]:
 
     inlet = _build_regime(
         start_id=next_id, n=cfg.n_inlet_seed_cases, seed=cfg.seed + 1,
-        T_range=cfg.T_in_range_K, P_range=cfg.P_in_range_Pa, X_values=cfg.X_H2O_values,
+        T_range=cfg.inlet_seed_T_in_range_K, P_range=cfg.P_in_range_Pa, X_values=cfg.X_H2O_values,
         Re_range=cfg.Re_in_range, L_range=cfg.inlet_seed_L_range_m,
         H_range=cfg.inlet_seed_H_peak_range_W_m2,
         n_points=cfg.n_points, shapes=cfg.shapes, regime="inlet_seed", diameters=diameters,
