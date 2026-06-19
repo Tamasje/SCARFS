@@ -36,6 +36,26 @@ prior behaviour exactly); the production defaults are set in [`configs/train_mer
 | gap-5 | Realizability rate floor | `scarfs/training/losses.py` (`realizability_penalty`) | `test_physics_augmentation.py`, `test_train_merged_integration.py` |
 | — | k=8→16 default (ω_Z lever) | `configs/train_merged.json` | `test_training_merged.py::test_config_merged_json_parse` |
 
+### A/B validation on the pilot — 2026-06-19 (directional, non-certifying; `scripts/ab_pilot_physics.py`)
+
+k=16, identical splits, physics-OFF vs all-ON, evaluated on 7,103 held-out val rows; each change
+scored on its own axis. 20-epoch A/B + a 100-epoch all-ON run (`runs/ab_pilot_*.json`):
+
+| Change | Axis | Result | Verdict |
+|---|---|---|---|
+| #1 rate-tied energy | rate-derived vs head abs. R² | 0.86 vs 0.69 @100ep (0.60 vs 0.36 @20ep) | **confirmed** — rate path wins |
+| #4 atom-projection | atom residual (rel) ↓ | 0.53 → 0.235 | **works**, rate R² unchanged (0.988 major) |
+| gap-5 realizability | predicted violation frac ↓ | 0.224 → 0.18 | **works** |
+| #5 transport | μ / k R² | 0.82 / 0.88 @100ep | **works** (new capability) |
+| k=16 | ω_Z R² | floor → 0.084 @100ep (E9 ref 0.84) | **climbing — needs full HPC run** |
+| #3 Keq | near-eq extent vs data | pred 0.55–0.69 vs **true 0.83** | **rejected by data → default OFF** |
+
+Two findings drove decisions: (a) the 20-epoch energy "dilution" was **under-training** — it recovered
+to 0.86 at 100 epochs, so the physics terms cost nothing on accuracy with adequate budget; (b) the Keq
+penalty **over-suppresses** the near-equilibrium dehydrogenation extent (the data's net extent there is
+≈0.83, not 0, because the ξ̇ proxy absorbs other channels), so `keq_weight` is now **0.0 by default**
+(machinery kept). ω_Z needs the full HPC run to clear the floor (expected; overnight RC-C).
+
 **HPC-gated (cannot run locally):** the actual DB regeneration (needs CRACKSIM DLL), full training,
 and the a-posteriori Fluent run. Two honesty gates carry forward to that run: (a) gate retiring the
 distilled-head energy fallback on re-scoring the C rate-derived recompute against the §5 integral

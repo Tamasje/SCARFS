@@ -631,9 +631,11 @@ def test_config_merged_json_parse():
     # physics-augmentation terms wired on (conservative small weights)
     assert cfg.model.transport_outputs == 2
     assert cfg.loss.atom_projection_weight > 0.0
-    assert cfg.loss.keq_weight > 0.0
     assert cfg.loss.realizability_weight > 0.0
     assert cfg.loss.transport_weight > 0.0
+    # Keq is wired but defaults OFF: the 2026-06-19 pilot A/B showed it over-suppresses the
+    # near-equilibrium dehydrogenation extent (machinery kept, weight 0.0).
+    assert cfg.loss.keq_weight == 0.0
 
 
 def test_config_merged_mimic_json_parse():
