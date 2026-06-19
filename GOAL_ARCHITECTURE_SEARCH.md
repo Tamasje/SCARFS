@@ -125,3 +125,30 @@ inflated) must be re-confirmed on the regenerated front-adaptive DB at HPC scale
 
 Best config saved as [`configs/train_merged_best.json`](configs/train_merged_best.json); the safe,
 transferable, no-CFD-cost win (energy-relRMSE checkpointing) is the headline change to carry forward.
+
+## Is the solution GENERAL or tailored to this DB? (OOD check — 2026-06-19)
+
+Applied the pilot-trained best model to **stride6** — a *disjoint operating-envelope* campaign it
+never saw (the README's distribution-shift diagnostic; same mechanism/species). Result on the
+energy source:
+
+- **correlation(pred, truth) = 0.997**; after one global scale factor it explains **99.6% of
+  stride6's energy variance** (scale-aligned relRMSE 0.063). Raw relRMSE was 0.96 ONLY because
+  stride6's absolute energy scale is ~25× the pilot's (different-generation data + higher-severity
+  corners) and the model outputs pilot-range magnitudes.
+
+**Interpretation:** the architecture/loss/physics/methodology learned the **general chemistry
+source-term function**, not pilot-specific memorization — a tailored model could not reproduce a
+disjoint campaign's energy shape at 0.997 correlation. The single OOD gap is **absolute magnitude**,
+which is a **data-coverage** property (a model can only output magnitudes inside its training range),
+not an architecture flaw. So generality = (general design — confirmed) × (training data that SPANS
+the deployment envelope) — exactly why the regenerated DB's broader coverage (#2/#6 enrichment),
+not just its case count, matters. Caveats: 87-row OOD sample (directional); part of the 25× is
+likely a stride6 convention difference (correlation is convention-invariant, so the 0.997 stands).
+
+**General (transfers as-is, data-agnostic):** the architecture family, the composite physics losses
+(rate-tied energy, atom-projection, realizability), energy-relRMSE checkpointing, the cosine
+schedule, the data-scaling methodology, and the C-UDF export. **Re-fit per dataset (expected):** the
+scalers, the energy-active selection, and the trained weights. **Re-ablate on the regenerated DB
+(pilot-tuned starting points):** k (16 vs 32 — a CFD-cost tradeoff the small-data variance inflated),
+the loss weights, and the epoch budget.
