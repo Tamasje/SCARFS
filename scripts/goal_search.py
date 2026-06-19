@@ -50,7 +50,16 @@ EXPERIMENTS = {
     # --- loss emphasis on the energy-relevant signal / the high-|S_E| tail ---
     "energyw1":   lambda c: _set(c.loss, energy_weight=1.0),
     "tailw4":     lambda c: _set(c.data, tail_weight_alpha=4.0),
-    # --- combine the most promising once screened (filled in later) ---
+    # --- combine the batch-1 winners (k32 + capacity + tail + energy emphasis) ---
+    "combo":      lambda c: (_set(c.model, latent_dim=32, rate_hidden=(256, 256, 128)),
+                             _set(c.loss, energy_weight=1.0), _set(c.data, tail_weight_alpha=4.0)),
+    "k48":        lambda c: _set(c.model, latent_dim=48),
+    "combo_k48":  lambda c: (_set(c.model, latent_dim=48, rate_hidden=(256, 256, 128)),
+                             _set(c.loss, energy_weight=1.0), _set(c.data, tail_weight_alpha=6.0)),
+    # --- computational: cosine LR + warmup (deterministic map anneals to a lower final error) ---
+    "combo_cos":  lambda c: (_set(c.model, latent_dim=32, rate_hidden=(256, 256, 128)),
+                             _set(c.loss, energy_weight=1.0), _set(c.data, tail_weight_alpha=4.0),
+                             _set(c.optim, lr_schedule="cosine", warmup_epochs=10)),
 }
 
 

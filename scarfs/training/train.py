@@ -66,6 +66,33 @@ def _select_device() -> str:
     return "cpu"
 
 
+def _build_lr_scheduler(optimiser, cfg: TrainConfig):
+    """Optional cosine-with-warmup LR schedule (opt-in via ``cfg.optim.lr_schedule == 'cosine'``).
+
+    A deterministic stiff-map regression (the energy/rate target is a noise-free function of the
+    state) benefits from annealing the LR to a small floor: it reaches a lower final error than a
+    constant LR once near the optimum.  Returns ``None`` when disabled (default) so existing runs
+    are byte-for-byte unchanged.
+    """
+    if getattr(cfg.optim, "lr_schedule", "none") != "cosine":
+        return None
+    import math
+
+    import torch
+
+    warmup = max(int(cfg.optim.warmup_epochs), 0)
+    total = max(int(cfg.optim.epochs), 1)
+    min_frac = float(cfg.optim.min_lr_frac)
+
+    def lr_lambda(ep: int) -> float:
+        if warmup and ep < warmup:
+            return (ep + 1) / warmup
+        prog = (ep - warmup) / max(total - warmup, 1)
+        return min_frac + (1.0 - min_frac) * 0.5 * (1.0 + math.cos(math.pi * min(prog, 1.0)))
+
+    return torch.optim.lr_scheduler.LambdaLR(optimiser, lr_lambda)
+
+
 def build_model(cfg: TrainConfig, spec: FeatureSpec):
     """Instantiate the configured surrogate (PyTorch)."""
     if cfg.model.kind == "reduced":
@@ -933,12 +960,15 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
     }
 
     optimiser = torch.optim.AdamW(model.parameters(), lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
+    scheduler = _build_lr_scheduler(optimiser, cfg)
     history: list[dict] = []
     best_val, best_state, since = float("inf"), None, 0
 
     for epoch in range(cfg.optim.epochs):
         tr, tr_parts = _epoch(model, cfg, bundle, optimiser, train=True)
         va, va_parts = _epoch(model, cfg, bundle, optimiser, train=False)
+        if scheduler is not None:
+            scheduler.step()
         history.append({"epoch": epoch, "train": tr, "val": va,
                         "train_parts": tr_parts, "val_parts": va_parts})
         monitor = va if np.isfinite(va) else tr
