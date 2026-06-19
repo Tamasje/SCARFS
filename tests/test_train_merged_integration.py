@@ -166,3 +166,45 @@ def test_train_merged_with_physics_augmentation(tmp_path):
     for term in ("atom_projection", "keq", "realizability"):
         assert term in last_parts, f"{term!r} missing: {sorted(last_parts)}"
         assert np.isfinite(last_parts[term]), f"{term!r} not finite"
+
+
+def test_train_merged_all_physics_terms_and_transport_together(tmp_path):
+    """The production-shaped combination — k>8, atom-projection + Keq + realizability + transport
+    heads ALL enabled at once — trains end-to-end and reports every term finite."""
+    import pandas as pd
+
+    df = load_database(FIXTURE)
+    schema = infer_schema(df)
+    T = df["T [K]"].to_numpy(float)
+    df = df.copy()
+    df["mu [Pa-s]"] = 2.0e-5 + 1.0e-8 * (T - 900.0)
+    df["k [W/m/K]"] = 0.08 + 5.0e-5 * (T - 900.0)
+    aug = tmp_path / "aug.parquet"
+    df.to_parquet(aug)
+    seed = _non_degenerate_seed(load_database(aug), schema, val_fraction=0.3, test_fraction=0.25)
+
+    cfg = TrainConfig(
+        data=DataConfig(
+            database_path=str(aug), input_species="dry_all", target_species="energy_active",
+            val_fraction=0.3, test_fraction=0.25, split_by_case=True,
+            energy_active_coverage=0.999, mech_yaml=str(MECH_YAML), seed=seed,
+        ),
+        model=ModelConfig(
+            kind="merged", latent_dim=4, decoder_hidden=(16,), rate_hidden=(16,),
+            latent_source_hidden=(16,), energy_hidden=(8,),
+            transport_outputs=2, transport_hidden=(8,),
+        ),
+        optim=OptimConfig(lr=1e-3, epochs=2, batch_size=256, patience=5),
+        loss=LossConfig(
+            atom_projection_weight=5e-3, keq_weight=1e-2, keq_width=1.0,
+            realizability_weight=1e-2, realizability_dt=1e-3, transport_weight=0.05,
+        ),
+        output_dir=str(tmp_path / "run"),
+    )
+    metrics = train(cfg)
+
+    assert np.isfinite(metrics["best_val"])
+    last = metrics["history"][-1]["train_parts"]
+    for term in ("rate", "atom_projection", "keq", "realizability", "transport",
+                 "energy_rate_tied", "latent_source"):
+        assert term in last and np.isfinite(last[term]), f"{term} missing/non-finite"

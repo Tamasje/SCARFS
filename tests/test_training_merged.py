@@ -624,10 +624,16 @@ def test_config_merged_json_parse():
     cfg = TrainConfig.load(config_path)
     # assert
     assert cfg.model.kind == "merged"
-    assert cfg.model.latent_dim == 8
-    assert cfg.loss.rollout_mode == "lagrangian"
+    assert cfg.model.latent_dim == 16  # overnight E8/E9: k=16 sits at the omega_Z kNN ceiling
+    assert cfg.loss.rollout_mode == "manifold"  # measured: manifold >> lagrangian on front-adaptive
     assert cfg.data.tail_strata == 10
     assert cfg.data.test_fraction == 0.15
+    # physics-augmentation terms wired on (conservative small weights)
+    assert cfg.model.transport_outputs == 2
+    assert cfg.loss.atom_projection_weight > 0.0
+    assert cfg.loss.keq_weight > 0.0
+    assert cfg.loss.realizability_weight > 0.0
+    assert cfg.loss.transport_weight > 0.0
 
 
 def test_config_merged_mimic_json_parse():

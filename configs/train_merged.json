@@ -1,5 +1,5 @@
 {
-  "_comment": "Merged model defaults (MEASURED). rollout_mode=MANIFOLD: front-adaptive storage produces large/variable dtau, on which the Lagrangian explicit-Euler rollout is ill-posed and dominates the loss \u2014 pilot A/B 2026-06-12: lagrangian->manifold lifted test energy R2 0.56->0.775, val 0.75->0.96, latent R2 0.83->0.93, BENZENE rate R2 -0.56->+0.76. Lagrangian needs a dense fixed-fine-dtau storage mode, not front-adaptive. spectral_norm off, consistency 0.02, sigma_floor 1e-10, head_finetune 40 also measured. Certification on the front-adaptive test set.",
+  "_comment": "Merged model defaults. rollout_mode=MANIFOLD (measured: lagrangian->manifold lifted test energy R2 0.56->0.775, val 0.75->0.96, latent R2 0.83->0.93, BENZENE +0.76; 2026-06-12). latent_dim=16: overnight E8/E9 showed k=16 sits AT the omega_Z kNN ceiling (R2~0.84) where k=8 is information-limited. PHYSICS TERMS (new, conservative small weights; ablate against the E9 baseline before claiming gains): atom_projection_weight (constant null-space conservation projector, a-priori only), keq_weight (C2H6<->C2H4+H2 equilibrium consistency - validate net-rate collapse near Keq before trusting), realizability_weight (consumption can't deplete a species within dt), transport_weight + transport_outputs=2 (mu/k DEFINE_PROPERTY heads). spectral_norm off, consistency 0.02, sigma_floor 1e-10, head_finetune 40 measured. Certification on the front-adaptive test set; gate retiring the distilled-head energy fallback on re-scoring the C rate-derived recompute against the \u00a75 integral gate.",
   "data": {
     "database_path": "Database_FINAL.parquet",
     "input_species": "dry_all",
@@ -29,7 +29,7 @@
   },
   "model": {
     "kind": "merged",
-    "latent_dim": 8,
+    "latent_dim": 16,
     "decoder_hidden": [
       128,
       256
@@ -47,7 +47,12 @@
       64
     ],
     "activation": "silu",
-    "spectral_norm": false
+    "spectral_norm": false,
+    "transport_outputs": 2,
+    "transport_hidden": [
+      64,
+      64
+    ]
   },
   "optim": {
     "lr": 0.001,
@@ -69,6 +74,12 @@
     "qoi_recon_weight": 0.0,
     "manifold_weight": 0.1,
     "atom_balance_weight": 0.0,
+    "atom_projection_weight": 0.005,
+    "keq_weight": 0.01,
+    "keq_width": 1.0,
+    "realizability_weight": 0.01,
+    "realizability_dt": 0.001,
+    "transport_weight": 0.05,
     "noise_std": 0.05,
     "unroll_steps": 1,
     "rollout_mode": "manifold"
