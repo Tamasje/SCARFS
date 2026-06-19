@@ -40,6 +40,7 @@ def _set(obj, **kw):
 # Each experiment mutates a fresh master-config (keq already forced off in run()).
 EXPERIMENTS = {
     "baseline":   lambda c: None,
+    "baseline_ref": lambda c: None,  # identical config; a distinct ledger key for a matched-budget reference
     # --- capacity (deterministic map may need more approximation power) ---
     "rate_cap":   lambda c: _set(c.model, rate_hidden=(256, 256, 128)),
     "deep_all":   lambda c: _set(c.model, rate_hidden=(256, 256, 128),

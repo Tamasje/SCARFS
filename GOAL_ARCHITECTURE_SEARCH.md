@@ -55,11 +55,24 @@ Physical/chemical (code-level, next):
 - hybrid rate-head input (latent z + a few decoded major species) — capacity for the front.
 - Sobolev/derivative supervision along the reaction coordinate (PFR ODE residual).
 
-## Ledger (pilot val; relRMSE lower = better; factor vs baseline)
+## Ledger (pilot val; relRMSE lower = better; factor vs 100-epoch baseline)
 
-| exp | relRMSE | factor | R² | tail relRMSE | rate R² maj | ω_Z R² | atom res | realiz viol |
-|-----|--------:|-------:|---:|-------------:|------------:|-------:|---------:|------------:|
-| _(batch 1 running — filled on completion)_ | | | | | | | | |
+| exp | epochs | relRMSE | factor | R² | rate R² maj | ω_Z R² | note |
+|-----|-------:|--------:|-------:|---:|------------:|-------:|------|
+| baseline | 100 | 0.340 | 1.00× | 0.879 | 0.986 | 0.11 | k16, the 100-ep anchor |
+| rate_cap | 100 | 0.306 | 1.11× | 0.902 | 0.990 | 0.10 | +capacity |
+| k32 | 100 | 0.273 | 1.24× | 0.922 | 0.987 | 0.05 | wider latent (k24 worse, k48 worse) |
+| energyw1 | 100 | 0.313 | 1.09× | 0.897 | 0.986 | 0.04 | energy_weight 1.0 |
+| tailw4 | 100 | 0.280 | 1.21× | 0.918 | 0.988 | 0.13 | tail_weight_alpha 4 (global err is tail-dominated) |
+| **combo** | 100 | 0.212 | **1.60×** | 0.953 | — | — | k32+cap+tail4+energy1 (compounded) |
+| **combo** | 400 | 0.126 | **2.69×** | 0.983 | 0.996 | **0.67** | training budget is the dominant lever; not plateaued |
+| combo_cos | 400 | 0.123 | 2.77× | 0.984 | 0.996 | 0.29 | cosine ~3% on energy; hurt ω_Z |
+
+**Read so far:** (1) the architecture levers (k32, capacity, tail/energy weighting) compound to 1.60×
+at fixed budget; (2) **training budget dominates** — `combo` 0.212→0.126 from 100→400 epochs with no
+early-stop, and ω_Z climbs 0.08→0.67 (it was just under-trained); (3) cosine LR is marginal. Next:
+matched-budget reference (`baseline_ref`@400) to separate "longer training" from "architecture",
+and `combo`@800 to find the floor.
 
 ## Stopping criterion
 
