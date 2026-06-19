@@ -192,6 +192,9 @@ def evaluate(bundle_dir: str) -> dict:
     res: dict = {}
     m = json.loads((bundle / "metrics.json").read_text()).get("absorption_metrics_val", {})
     res["energy_rate_derived_R2"] = m.get("rate_derived", {}).get("r2", float("nan"))
+    res["energy_rate_derived_relRMSE"] = m.get("rate_derived", {}).get("rel_rmse", float("nan"))
+    res["energy_tail_relRMSE"] = m.get("rate_derived", {}).get("tail_rel_rmse", float("nan"))
+    res["energy_tail_median_rel_err"] = m.get("rate_derived", {}).get("tail_median_rel_err", float("nan"))
     res["energy_head_R2"] = m.get("head", {}).get("r2", float("nan"))
 
     true_mass = rho[:, None] * dfv[schema.dydt_columns(list(energy_active))].to_numpy(float)

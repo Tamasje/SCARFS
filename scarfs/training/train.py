@@ -66,6 +66,33 @@ def _select_device() -> str:
     return "cpu"
 
 
+def _build_lr_scheduler(optimiser, cfg: TrainConfig):
+    """Optional cosine-with-warmup LR schedule (opt-in via ``cfg.optim.lr_schedule == 'cosine'``).
+
+    A deterministic stiff-map regression (the energy/rate target is a noise-free function of the
+    state) benefits from annealing the LR to a small floor: it reaches a lower final error than a
+    constant LR once near the optimum.  Returns ``None`` when disabled (default) so existing runs
+    are byte-for-byte unchanged.
+    """
+    if getattr(cfg.optim, "lr_schedule", "none") != "cosine":
+        return None
+    import math
+
+    import torch
+
+    warmup = max(int(cfg.optim.warmup_epochs), 0)
+    total = max(int(cfg.optim.epochs), 1)
+    min_frac = float(cfg.optim.min_lr_frac)
+
+    def lr_lambda(ep: int) -> float:
+        if warmup and ep < warmup:
+            return (ep + 1) / warmup
+        prog = (ep - warmup) / max(total - warmup, 1)
+        return min_frac + (1.0 - min_frac) * 0.5 * (1.0 + math.cos(math.pi * min(prog, 1.0)))
+
+    return torch.optim.lr_scheduler.LambdaLR(optimiser, lr_lambda)
+
+
 def build_model(cfg: TrainConfig, spec: FeatureSpec):
     """Instantiate the configured surrogate (PyTorch)."""
     if cfg.model.kind == "reduced":
@@ -933,15 +960,35 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
     }
 
     optimiser = torch.optim.AdamW(model.parameters(), lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
+    scheduler = _build_lr_scheduler(optimiser, cfg)
+    use_energy_ckpt = (getattr(cfg.optim, "checkpoint_metric", "total") == "energy_relrmse"
+                       and absorption_val is not None and len(bundle.X_val))
+
+    def _val_energy_relrmse() -> float:
+        """Held-out rate-derived absorption relRMSE (the DEPLOYED quantity) for checkpointing."""
+        model.eval()
+        preds = []
+        with torch.no_grad():
+            Xv = torch.as_tensor(bundle.X_val, dtype=torch.float32, device=device)
+            for s0 in range(0, len(Xv), cfg.optim.batch_size):
+                xb = Xv[s0: s0 + cfg.optim.batch_size]
+                o = model.forward(xb[:, :n_in], xb[:, n_in:])
+                preds.append(
+                    _absorption_from_rates(_rates_to_physical(o["rates"]), xb[:, n_in:]).cpu().numpy())
+        return absorption_metrics(np.concatenate(preds), absorption_val)["rel_rmse"]
+
     history: list[dict] = []
     best_val, best_state, since = float("inf"), None, 0
 
     for epoch in range(cfg.optim.epochs):
         tr, tr_parts = _epoch(model, cfg, bundle, optimiser, train=True)
         va, va_parts = _epoch(model, cfg, bundle, optimiser, train=False)
+        if scheduler is not None:
+            scheduler.step()
+        # Checkpoint on the deployed metric (val energy relRMSE) when configured, else total val loss.
+        monitor = _val_energy_relrmse() if use_energy_ckpt else (va if np.isfinite(va) else tr)
         history.append({"epoch": epoch, "train": tr, "val": va,
                         "train_parts": tr_parts, "val_parts": va_parts})
-        monitor = va if np.isfinite(va) else tr
         if monitor < best_val:
             best_val, since = monitor, 0
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
