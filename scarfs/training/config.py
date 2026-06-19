@@ -116,6 +116,11 @@ class OptimConfig:
     warmup_epochs: int = 0
     #: Floor of the cosine schedule as a fraction of the base LR (annealed-to LR = min_lr_frac·lr).
     min_lr_frac: float = 0.05
+    #: Main-loop checkpoint selection metric: "total" (best total val loss, default) | "energy_relrmse"
+    #: (best val rate-derived absorption relRMSE — the DEPLOYED quantity). The total val loss is
+    #: dominated by the slow-converging latent-source term, so it can checkpoint away from the
+    #: energy/rate optimum; selecting on the deployed metric fixes that (merged path only).
+    checkpoint_metric: str = "total"
     #: Merged model only: after the main loop, re-tune the distilled absorption head alone
     #: (trunk + rate/latent heads frozen) for this many epochs, checkpointed on the val
     #: head loss. The main loop's best checkpoint is selected on the TOTAL val loss, which

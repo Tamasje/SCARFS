@@ -61,6 +61,10 @@ EXPERIMENTS = {
     "combo_cos":  lambda c: (_set(c.model, latent_dim=32, rate_hidden=(256, 256, 128)),
                              _set(c.loss, energy_weight=1.0), _set(c.data, tail_weight_alpha=4.0),
                              _set(c.optim, lr_schedule="cosine", warmup_epochs=10)),
+    # --- checkpoint on the deployed metric (val energy relRMSE), not latent-dominated total loss ---
+    "combo_eck":  lambda c: (_set(c.model, latent_dim=32, rate_hidden=(256, 256, 128)),
+                             _set(c.loss, energy_weight=1.0), _set(c.data, tail_weight_alpha=4.0),
+                             _set(c.optim, checkpoint_metric="energy_relrmse")),
 }
 
 

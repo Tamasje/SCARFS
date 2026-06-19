@@ -961,6 +961,22 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
 
     optimiser = torch.optim.AdamW(model.parameters(), lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
     scheduler = _build_lr_scheduler(optimiser, cfg)
+    use_energy_ckpt = (getattr(cfg.optim, "checkpoint_metric", "total") == "energy_relrmse"
+                       and absorption_val is not None and len(bundle.X_val))
+
+    def _val_energy_relrmse() -> float:
+        """Held-out rate-derived absorption relRMSE (the DEPLOYED quantity) for checkpointing."""
+        model.eval()
+        preds = []
+        with torch.no_grad():
+            Xv = torch.as_tensor(bundle.X_val, dtype=torch.float32, device=device)
+            for s0 in range(0, len(Xv), cfg.optim.batch_size):
+                xb = Xv[s0: s0 + cfg.optim.batch_size]
+                o = model.forward(xb[:, :n_in], xb[:, n_in:])
+                preds.append(
+                    _absorption_from_rates(_rates_to_physical(o["rates"]), xb[:, n_in:]).cpu().numpy())
+        return absorption_metrics(np.concatenate(preds), absorption_val)["rel_rmse"]
+
     history: list[dict] = []
     best_val, best_state, since = float("inf"), None, 0
 
@@ -969,9 +985,10 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         va, va_parts = _epoch(model, cfg, bundle, optimiser, train=False)
         if scheduler is not None:
             scheduler.step()
+        # Checkpoint on the deployed metric (val energy relRMSE) when configured, else total val loss.
+        monitor = _val_energy_relrmse() if use_energy_ckpt else (va if np.isfinite(va) else tr)
         history.append({"epoch": epoch, "train": tr, "val": va,
                         "train_parts": tr_parts, "val_parts": va_parts})
-        monitor = va if np.isfinite(va) else tr
         if monitor < best_val:
             best_val, since = monitor, 0
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
