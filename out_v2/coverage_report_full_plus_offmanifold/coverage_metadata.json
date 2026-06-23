@@ -1,0 +1,113 @@
+{
+  "full": {
+    "path": "C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\out_v2\\full.parquet",
+    "metadata_rows": 749001,
+    "sample_rows_used": 250000,
+    "columns_used": {
+      "CaseID": "CaseID",
+      "regime": "regime",
+      "sample_kind": "sample_kind",
+      "T": "T [K]",
+      "P": "P [Pa]",
+      "heat_abs": "Reaction heat absorption [J/s/m3]",
+      "wall_source": "S Wall imposed [J/s/m3]",
+      "z": "z [m]",
+      "tau": "tau [s]",
+      "pfr_index": "PFR point index",
+      "T_in": "T_in [K]",
+      "P_in": "P_in [Pa]",
+      "steam": "steam_to_ethane [kg/kg]",
+      "H_peak": "H_peak [W/m2]",
+      "diameter": "diameter [m]",
+      "Re_in": "Re_in [-]",
+      "U_in": "U_in [m/s]",
+      "mdot": "mdot [kg/s]",
+      "inlet_C2H6": "inlet_Y_C2H6 [-]",
+      "inlet_H2O": "inlet_Y_H2O [-]"
+    },
+    "species_cols": {
+      "C2H6": "Y_C2H6",
+      "C2H4": "Y_C2H4",
+      "C2H2": "Y_C2H2",
+      "C3H6": "Y_C3H6",
+      "C3H8": "Y_C3H8",
+      "H2O": "Y_H2O"
+    }
+  },
+  "offmanifold": {
+    "path": "C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\out_v2\\offmanifold_1000000.parquet",
+    "metadata_rows": 1000000,
+    "sample_rows_used": 250000,
+    "columns_used": {
+      "CaseID": "CaseID",
+      "regime": "regime",
+      "sample_kind": "sample_kind",
+      "T": "T [K]",
+      "P": "P [Pa]",
+      "heat_abs": "Reaction heat absorption [J/s/m3]",
+      "wall_source": "S Wall imposed [J/s/m3]",
+      "z": "z [m]",
+      "tau": "tau [s]",
+      "pfr_index": "PFR point index",
+      "T_in": "T_in [K]",
+      "P_in": "P_in [Pa]",
+      "steam": "steam_to_ethane [kg/kg]",
+      "H_peak": "H_peak [W/m2]",
+      "diameter": "diameter [m]",
+      "U_in": "u [m/s]",
+      "mdot": "mdot [kg/s]",
+      "inlet_C2H6": "inlet_Y_C2H6 [-]",
+      "inlet_H2O": "inlet_Y_H2O [-]"
+    },
+    "species_cols": {
+      "C2H6": "Y_C2H6",
+      "C2H4": "Y_C2H4",
+      "C2H2": "Y_C2H2",
+      "C3H6": "Y_C3H6",
+      "C3H8": "Y_C3H8",
+      "H2O": "Y_H2O"
+    }
+  },
+  "state_cols_used": [
+    "T [K]",
+    "P [bar]",
+    "tau [ms]",
+    "X_C2H6 [%]",
+    "Y_C2H6",
+    "Y_C2H4",
+    "Y_C2H2",
+    "Y_C3H6",
+    "Y_C3H8",
+    "Heat absorption [MW/m3]",
+    "Wall source [MW/m3]"
+  ],
+  "nearest_distance_cols_used": [
+    "T [K]",
+    "P [bar]",
+    "Y_C2H6",
+    "Y_C2H4",
+    "Y_C2H2",
+    "Y_C3H6",
+    "Y_C3H8",
+    "Heat absorption [MW/m3]"
+  ],
+  "pca_cols_used": [
+    "T [K]",
+    "P [bar]",
+    "tau [ms]",
+    "X_C2H6 [%]",
+    "Y_C2H6",
+    "Y_C2H4",
+    "Y_C2H2",
+    "Y_C3H6",
+    "Y_C3H8",
+    "Heat absorption [MW/m3]",
+    "Wall source [MW/m3]"
+  ],
+  "pca_explained_variance_ratio": [
+    0.4336324892672371,
+    0.1289201428546452
+  ],
+  "bins_2d": 30,
+  "random_seed": 20260623
+}
