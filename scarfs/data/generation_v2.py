@@ -327,7 +327,10 @@ class GenV2Settings:
     t_max_K: float = T_MAX_K_V2
     storage: StorageConfig = field(
         default_factory=lambda: StorageConfig(mode="front_adaptive", max_frac_jump=0.03,
-                                              min_every_nth=1))
+                                              min_every_nth=1,
+                                              # composition co-trigger keeps the near-inlet
+                                              # induction zone (RC-1); ~1.0 arcsinh units is moderate
+                                              comp_arcsinh_jump=1.0, comp_arcsinh_floor=1.0e-4))
     # min_every_nth=1: the front-adaptive 3% threshold already bounds storage size; a size cap
     # >1 forces skipping consecutive points through the STEEPEST part of the front (where single
     # solver steps are largest), doubling those stored jumps — the gate-C 0.199 finding on the
@@ -335,7 +338,10 @@ class GenV2Settings:
     # stored-jump ceiling becomes the single-grid-step size; if that still exceeds the policy,
     # raise --n-points (the grid is the binding constraint, reported by Gate C).
     case_timeout_s: float = 900.0
-    keep_d_mix: bool = False
+    #: Emit the mixture-averaged diffusivity family ``D_<species> [m2/s]`` (Cantera mix_diff_coeffs).
+    #: Now ON by default (coverage gap 3): enables a future state-dependent UDS species-diffusion
+    #: closure. Inert to training (keys off Y_/dYdt_ only); adds ~n_species columns of storage.
+    keep_d_mix: bool = True
     generator_version: str = "v2.0"
 
 
@@ -355,9 +361,11 @@ def settings_from_doc(doc: dict) -> "GenV2Settings":
     return GenV2Settings(**clean)
 
 
-#: Per-regime FULL-tier case counts (the approved spec, ~20.5k cases).
+#: Per-regime FULL-tier case counts (~23.5k cases). inlet_seed and high_T are enlarged vs the
+#: original spec to attack the dominant a-posteriori failure RC-1 (near-inlet under-coverage,
+#: workflow #2) and the high-T near-wall starvation RC-4 (workflow #6) — the DB can grow freely.
 FULL_TIER_COUNTS = {
-    "body": 12000, "inlet_seed": 2500, "high_T": 2500, "tail": 2000, "deep_conversion": 1500,
+    "body": 12000, "inlet_seed": 5000, "high_T": 4000, "tail": 2000, "deep_conversion": 1500,
 }
 #: Pilot = the same Sobol streams, first ~6% per regime (≈1.2k cases — prove-it-works scale).
 PILOT_FRACTION = 0.06
@@ -365,7 +373,7 @@ PILOT_FRACTION = 0.06
 SMOKE_PER_REGIME = 2
 #: Independent-stream test tier (certification set).
 TEST_TIER_COUNTS = {
-    "body": 2000, "inlet_seed": 250, "high_T": 250, "tail": 250, "deep_conversion": 250,
+    "body": 2000, "inlet_seed": 500, "high_T": 400, "tail": 250, "deep_conversion": 250,
 }
 TEST_SEED_OFFSET = 7777
 
@@ -507,6 +515,7 @@ def assemble_v2_frame(
     settings: GenV2Settings,
     inlet_Y: dict[str, float],
     sample_kind: str = "trajectory",
+    D: np.ndarray | None = None,
 ):
     """Assemble the v2 export DataFrame (float64 species/rates; no pseudo-species columns).
 
@@ -521,6 +530,13 @@ def assemble_v2_frame(
                        columns=[f"Y_{s}" for s in species_names], index=idx)
     df_dYdt = pd.DataFrame(np.asarray(dYdt, dtype=np.float64),
                            columns=[f"dYdt_{s} [1/s]" for s in species_names], index=idx)
+    # Optional mixture-averaged diffusivity family (coverage gap 3: enables a future state-dependent
+    # UDS species-diffusion closure; inert to training, which keys off Y_/dYdt_ only).
+    df_D = (
+        pd.DataFrame(np.asarray(D, dtype=np.float64),
+                     columns=[f"D_{s} [m2/s]" for s in species_names], index=idx)
+        if D is not None else None
+    )
     df_main = pd.DataFrame({
         "T [K]": T, "P [Pa]": P,
         "Reaction heat absorption [J/s/m3]": absorption,
@@ -555,7 +571,8 @@ def assemble_v2_frame(
         df_main["Re_in [-]"] = float(runner_case["Re_in"])
     if "U_in" in runner_case:
         df_main["U_in [m/s]"] = float(runner_case["U_in"])
-    return pd.concat([dfY, df_dYdt, df_main], axis=1, copy=False)
+    parts = [dfY, df_dYdt] + ([df_D] if df_D is not None else []) + [df_main]
+    return pd.concat(parts, axis=1, copy=False)
 
 
 # ---------------------------------------------------------------------------
@@ -634,12 +651,15 @@ def run_case_v2(case: dict, settings: GenV2Settings):
 
         cp_f = np.empty(n); cv_f = np.empty(n); rho_f = np.empty(n)
         mu_f = np.empty(n); k_f = np.empty(n); Wm_f = np.empty(n)
+        D_f = np.empty((n, len(species_names))) if settings.keep_d_mix else None
         for j in range(n):
             gas.TPY = float(T_full[j]), float(P_full[j]), Y_full[j, :]
             cp_f[j] = float(gas.cp_mass); cv_f[j] = float(gas.cv_mass)
             rho_f[j] = float(gas.density)
             mu_f[j] = _prop_val(gas, "viscosity"); k_f[j] = _prop_val(gas, "thermal_conductivity")
             Wm_f[j] = float(gas.mean_molecular_weight)
+            if D_f is not None:
+                D_f[j, :] = np.asarray(gas.mix_diff_coeffs, dtype=float)  # [m2/s], mixture-averaged
 
         area = circular_area(case["diameter_m"])
         u_f = case["mdot"] / np.clip(rho_f * area, 1.0e-300, None)
@@ -665,8 +685,9 @@ def run_case_v2(case: dict, settings: GenV2Settings):
         molar_rate_f = mass_rate_f / mw[None, :]                       # [kmol/m³/s] = NetRates r
         absorption_f = compute_reaction_energy_terms(gas, T_full, P_full, Y_full, molar_rate_f)
 
-        # FRONT-ADAPTIVE storage on the full solved grid (the v2 point).
-        store_idx = select_storage_indices(absorption_f, settings.storage)
+        # FRONT-ADAPTIVE storage on the full solved grid (the v2 point), with the composition-
+        # curvature co-trigger so the near-inlet induction zone (|ΔS_E|≈0, Y moving) is kept (RC-1).
+        store_idx = select_storage_indices(absorption_f, settings.storage, comp=Y_full)
         if store_idx.size <= 0:
             return None, "no storage indices"
 
@@ -691,6 +712,7 @@ def run_case_v2(case: dict, settings: GenV2Settings):
             s_wall=s_wall_full[store_idx], q_wall=q_wall_full[store_idx],
             pfr_point_index=store_idx, n_points_solved=n,
             runner_case=case, settings=settings, inlet_Y=inlet_Y,
+            D=(D_f[store_idx, :] if D_f is not None else None),
         )
         return df, audit
     except Exception as e:  # noqa: BLE001 — worker resilience: report, never crash the pool
@@ -776,12 +798,15 @@ def eval_offmanifold_points(anchors_df, n_target: int, settings: GenV2Settings,
     rates_raw = np.empty((n, len(species_names)))
     rho = np.empty(n); cp = np.empty(n); cv = np.empty(n)
     mu = np.empty(n); kk = np.empty(n); Wm = np.empty(n)
+    D_off = np.empty((n, len(species_names))) if settings.keep_d_mix else None
     for j in range(n):
         gas.TPY = float(Tp[j]), float(Pp[j]), Yp[j, :]
         rates_raw[j, :] = CRACKSIM_rates_DLL(gas)
         rho[j] = float(gas.density); cp[j] = float(gas.cp_mass); cv[j] = float(gas.cv_mass)
         mu[j] = _prop_val(gas, "viscosity"); kk[j] = _prop_val(gas, "thermal_conductivity")
         Wm[j] = float(gas.mean_molecular_weight)
+        if D_off is not None:
+            D_off[j, :] = np.asarray(gas.mix_diff_coeffs, dtype=float)
     wdot = convert_raw_rates_to_kmol_m3_s(rates_raw)
     dYdt = compute_dYdt_from_wdot(wdot, mw, rho)
     absorption = compute_reaction_energy_terms(gas, Tp, Pp, Yp, wdot)
@@ -806,6 +831,7 @@ def eval_offmanifold_points(anchors_df, n_target: int, settings: GenV2Settings,
             runner_case=runner_stub, settings=settings,
             inlet_Y={"C2H6": float("nan"), "H2O": float("nan")},
             sample_kind="offmanifold",
+            D=(D_off[m_sel] if D_off is not None else None),
         ))
     return pd.concat(frames, axis=0, ignore_index=True)
 
@@ -954,6 +980,58 @@ def gate_front_resolution(df, max_frac_jump: float, slack: float = 1.5) -> dict[
         "n_grid_jumps": int(len(grid_jumps)),
         "passed": bool(np.percentile(pj, 95) <= max_frac_jump * slack),
         "threshold": max_frac_jump * slack,
+    }
+
+
+def gate_low_conversion_coverage(
+    df, threshold: float = 0.05, inlet_seed_target_frac: float = 0.25
+) -> dict[str, Any]:
+    """Gate E (RC-1): certify that the database actually covers near-inlet, low-conversion states.
+
+    The dominant a-posteriori failure (DIAGNOSIS.md:62-69) is the CFD freezing at <1% conversion
+    because near-inlet states are under-represented — and a training-loss reweight cannot create
+    coverage the trajectories never visited (workflow #2).  This gate makes the coverage explicit:
+    per-row ethane conversion ``X = (inlet_Y_C2H6 − Y_C2H6) / inlet_Y_C2H6`` is computed from the
+    stored columns, and the fraction of rows below *threshold* is reported overall and per regime.
+
+    PASS requires the ``inlet_seed`` regime to contribute at least *inlet_seed_target_frac* of its
+    rows below the conversion threshold — i.e. the enrichment regime is doing its job.  Trajectory
+    rows only (off-manifold rows have no inlet reference).
+
+    Parameters
+    ----------
+    df
+        A generated v2 frame (must carry ``inlet_Y_C2H6 [-]``, ``Y_C2H6`` and ``regime``).
+    threshold
+        Conversion below which a row counts as "near-inlet / low-conversion" (default 0.05).
+    inlet_seed_target_frac
+        Minimum low-conversion row fraction the inlet_seed regime must reach to pass.
+    """
+    traj = df[df["sample_kind"] == "trajectory"] if "sample_kind" in df.columns else df
+    if "inlet_Y_C2H6 [-]" not in traj.columns or "Y_C2H6" not in traj.columns:
+        raise ValueError("gate_low_conversion_coverage: needs 'inlet_Y_C2H6 [-]' and 'Y_C2H6'.")
+    y_in = traj["inlet_Y_C2H6 [-]"].to_numpy(float)
+    y = traj["Y_C2H6"].to_numpy(float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        conv = np.where(y_in > 0, (y_in - y) / y_in, np.nan)
+    low = conv < threshold
+
+    per_regime: dict[str, float] = {}
+    if "regime" in traj.columns:
+        reg = traj["regime"].to_numpy(object)
+        for r in np.unique(reg):
+            m = reg == r
+            per_regime[str(r)] = float(np.nanmean(low[m])) if m.any() else float("nan")
+
+    inlet_frac = per_regime.get("inlet_seed", float("nan"))
+    overall = float(np.nanmean(low)) if len(low) else float("nan")
+    return {
+        "threshold": threshold,
+        "overall_low_conv_frac": overall,
+        "per_regime_low_conv_frac": per_regime,
+        "inlet_seed_low_conv_frac": inlet_frac,
+        "inlet_seed_target_frac": inlet_seed_target_frac,
+        "passed": bool(np.isfinite(inlet_frac) and inlet_frac >= inlet_seed_target_frac),
     }
 
 

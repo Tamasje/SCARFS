@@ -315,6 +315,137 @@ def lagrangian_rollout_loss(
     return _mse(z_tp1_pred, z_tp1_true).mean()
 
 
+def atom_projection_penalty(
+    rates_mass: torch.Tensor,
+    molar_mass: torch.Tensor,
+    nonconserving_projector: torch.Tensor,
+) -> torch.Tensor:
+    """Mean ``‖r_molar · Q‖²`` — the element-violating component of the predicted molar rates.
+
+    ``Q`` (a CONSTANT matrix from :func:`scarfs.models.physics.atom_conservation_projector`) is the
+    orthogonal projector onto ``col(A)``; ``r_molar · Q`` is the part of the molar rates that does
+    NOT conserve atoms.  This is the better-conditioned sibling of :func:`atom_balance_penalty`
+    (which weights elements by their raw atom-count magnitude); both vanish exactly for an
+    atom-conserving rate vector, but the projector form is the scale-free L2 distance from the
+    conserving subspace, so a single ``atom_projection_weight`` behaves consistently across element
+    sets.  Closure is exact only over the full carrier set; on the reduced active set it is a
+    consistency pressure (documented limitation, RC-3).
+
+    Parameters
+    ----------
+    rates_mass
+        ``(batch, n_active)`` predicted physical mass rates ρ·dY/dt [kg m-3 s-1].
+    molar_mass
+        ``(n_active,)`` molar masses [kg kmol-1].
+    nonconserving_projector
+        ``(n_active, n_active)`` constant projector ``Q`` onto the non-conserving subspace.
+    """
+    molar = rates_mass / molar_mass.unsqueeze(0)                  # (batch, n_active) molar rates
+    nonconserving = molar @ nonconserving_projector              # (batch, n_active)
+    return (nonconserving ** 2).sum(dim=1).mean()
+
+
+def realizability_penalty(
+    rates_mass: torch.Tensor,
+    rho: torch.Tensor,
+    y_active_mass: torch.Tensor,
+    dt: float,
+    rho_floor: float = 1e-6,
+) -> torch.Tensor:
+    """Soft physical-realizability floor: a species cannot be consumed faster than it exists.
+
+    Over a representative timestep ``dt`` the *mass fraction* of species *i* consumed is
+    ``(−R_i)⁺·dt / ρ``; it cannot exceed the mass fraction present ``Y_i``.  We penalise the
+    squared overshoot in mass-fraction units::
+
+        penalty = mean Σ_i relu( (−R_i)⁺·dt / ρ − Y_i )²
+
+    Dividing by ``ρ`` (not ``ρ·Y_i``) keeps the term dimensionless AND finite for trace species
+    where ``Y_i → 0`` (a relative ``/ρ·Y_i`` form overflows float32).  Zero unless a predicted
+    consumption rate would drive a mass fraction negative within ``dt``.  Magnitude-only and
+    per-cell cheap, so it respects the source-term + plain-C constraints; arcsinh scaling is
+    sign-preserving but NOT realizability-aware, which is the gap this closes.
+
+    Parameters
+    ----------
+    rates_mass
+        ``(batch, n_active)`` predicted mass rates ρ·dY/dt [kg m-3 s-1] (negative = consumption).
+    rho
+        ``(batch,)`` mixture density [kg m-3].
+    y_active_mass
+        ``(batch, n_active)`` mass fractions of the active species [-].
+    dt
+        Representative timestep [s] over which depletion is bounded.
+    """
+    consumed_frac = (-rates_mass).clamp(min=0.0) * dt / (rho.unsqueeze(1) + rho_floor)
+    over = torch.relu(consumed_frac - y_active_mass.clamp(min=0.0))
+    return (over ** 2).sum(dim=1).mean()
+
+
+def keq_consistency_penalty(
+    omega_molar_rxn: torch.Tensor,
+    ln_quotient: torch.Tensor,
+    ln_keq: torch.Tensor,
+    stoich: torch.Tensor,
+    extent_scale: torch.Tensor | float = 1.0,
+    width: float = 1.0,
+) -> torch.Tensor:
+    """Equilibrium-consistency penalty for ONE reversible elementary step.
+
+    Thermodynamics forbids a net forward rate once the reaction quotient ``Q`` reaches the
+    equilibrium constant ``Keq(T)``.  We form the step's net extent rate by projecting the molar
+    rates of the involved species onto the stoichiometric vector,
+
+        ξ̇ = (Σ νᵢ·ω_molar,i) / (Σ νᵢ²)
+
+    and penalise its squared, scale-normalised magnitude weighted by a Gaussian bump that is
+    peaked at equilibrium (``Δ = lnQ − lnKeq → 0``)::
+
+        penalty = mean[ exp(−(Δ/width)²) · (ξ̇ / extent_scale)² ]
+
+    Far from equilibrium the weight ≈ 0, so kinetics are left to the data; near equilibrium the
+    net extent is driven toward zero.  This is a one-sided thermodynamic *consistency pressure*,
+    not a sign-correcting constraint (inference-time damping cannot flip a wrong-sign rate — see
+    the proposal's risk note); scope it to elementally-exact overall steps only.
+
+    Parameters
+    ----------
+    omega_molar_rxn
+        ``(batch, m)`` molar net rates [kmol m-3 s-1] of the *m* species in the step.
+    ln_quotient, ln_keq
+        ``(batch,)`` ln of the reaction quotient and equilibrium constant (same convention).
+    stoich
+        ``(m,)`` signed stoichiometric coefficients (reactants negative, products positive).
+    extent_scale
+        Scalar normaliser for ξ̇ (e.g. median |ξ̇| on the train split) so the term is O(1).
+    width
+        Gaussian width ``ε`` in ln-units around equilibrium.
+    """
+    w = torch.exp(-((ln_quotient - ln_keq) / width) ** 2)                     # (batch,)
+    xi_dot = (omega_molar_rxn * stoich.unsqueeze(0)).sum(dim=-1) / (stoich ** 2).sum()
+    return (w * (xi_dot / extent_scale) ** 2).mean()
+
+
+def transport_property_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    log_floor: float = 1e-30,
+) -> torch.Tensor:
+    """Log-space MSE for strictly-positive transport properties (μ, k, …).
+
+    Viscosity and conductivity are positive and span well under a decade across the front, so a
+    log transform gives a well-scaled, sign-safe target without arcsinh machinery.
+
+    Parameters
+    ----------
+    pred, target
+        ``(batch, n_props)`` predicted / database transport properties (same column order).
+    """
+    lp = torch.log(pred.clamp(min=log_floor))
+    lt = torch.log(target.clamp(min=log_floor))
+    return _mse(lp, lt).mean()
+
+
 # ---------------------------------------------------------------------------
 # Merged composite (B1c)
 # ---------------------------------------------------------------------------
@@ -348,6 +479,11 @@ def merged_composite(
     qoi_recon_weight: float = 0.0,
     manifold_weight: float = 0.1,
     atom_balance_weight: float = 0.0,
+    atom_projection_weight: float = 0.0,
+    keq_weight: float = 0.0,
+    realizability_weight: float = 0.0,
+    realizability_dt: float = 1.0e-3,
+    transport_weight: float = 0.0,
     noise_std: float = 0.0,
     rollout_mode: str = "manifold",
     # lagrangian rollout (optional)
@@ -357,6 +493,15 @@ def merged_composite(
     # atom balance (optional)
     molar_mass: torch.Tensor | None = None,
     element_matrix: torch.Tensor | None = None,
+    # atom-projection (constant null-space projector; optional)
+    atom_nonconserving_projector: torch.Tensor | None = None,
+    # Keq equilibrium consistency (optional) — closure (rates_phys, y_std, q, rho, n_total) -> scalar
+    keq_penalty_fn=None,
+    keq_n_total: torch.Tensor | None = None,
+    # realizability (optional) — needs active-species composition mean to un-standardise Y
+    comp_mean_active: torch.Tensor | None = None,
+    # transport-property heads (optional) — DB targets in (μ, k, …) column order
+    transport_targets: torch.Tensor | None = None,
     # absorption_from_rates_fn: callable that converts predicted mass rates + T to absorption
     absorption_from_rates_fn=None,
 ) -> tuple[torch.Tensor, dict[str, float]]:
@@ -538,6 +683,33 @@ def merged_composite(
         abp = atom_balance_penalty(rates_pred_phys, molar_mass, element_matrix)
         total = total + atom_balance_weight * abp
         parts["atom_balance"] = float(abp.detach())
+
+    # -- 10b. Atom-projection (constant null-space projector; better-conditioned) ----------
+    if (atom_projection_weight > 0.0 and atom_nonconserving_projector is not None
+            and molar_mass is not None and rates_pred is not None):
+        app = atom_projection_penalty(rates_pred_phys, molar_mass, atom_nonconserving_projector)
+        total = total + atom_projection_weight * app
+        parts["atom_projection"] = float(app.detach())
+
+    # -- 10c. Keq equilibrium consistency (scoped, opt-in) --------------------------------
+    if keq_weight > 0.0 and keq_penalty_fn is not None and rates_pred is not None:
+        kqp = keq_penalty_fn(rates_pred_phys, y_std_scaled, q, rho, keq_n_total)
+        total = total + keq_weight * kqp
+        parts["keq"] = float(kqp.detach())
+
+    # -- 10d. Realizability floor (consumption cannot deplete a species within dt) ---------
+    if (realizability_weight > 0.0 and comp_mean_active is not None and rates_pred is not None):
+        y_active = y_std_scaled[:, active_col_idx] * sigma_active.unsqueeze(0) + comp_mean_active.unsqueeze(0)
+        rzp = realizability_penalty(rates_pred_phys, rho, y_active, realizability_dt)
+        total = total + realizability_weight * rzp
+        parts["realizability"] = float(rzp.detach())
+
+    # -- 10e. Transport-property heads (μ, k, …) — log-space MSE ---------------------------
+    if transport_weight > 0.0 and transport_targets is not None and hasattr(model, "transport"):
+        tp_pred = model.transport(z_used, q)
+        tpl = transport_property_loss(tp_pred, transport_targets)
+        total = total + transport_weight * tpl
+        parts["transport"] = float(tpl.detach())
 
     # -- 11. Rollout term ----------------------------------------------------------------
     if rollout_mode == "lagrangian" and idx_t is not None and len(idx_t) > 0:

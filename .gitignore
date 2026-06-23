@@ -35,3 +35,6 @@ sanity_figures/
 
 # Exception: small committed test fixtures
 !tests/data/*.parquet
+
+# OS cruft
+.DS_Store

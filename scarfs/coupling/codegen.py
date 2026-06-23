@@ -176,6 +176,9 @@ def export_merged_udf(
     # -- 3. Load model weights (handle spectral-norm state dicts) -------------------
     weights_dict, spec_norm_detected = _load_model_weights(bundle_dir, spec)
 
+    # NASA7 + rate-scaler bundle for the rate-derived energy path (proposal #1); None -> legacy head.
+    energy_aux = _load_energy_thermo(spec, scalers)
+
     # -- 4. Build inlet spec -------------------------------------------------------
     if inlet is None:
         inlet = _default_inlet(spec)
@@ -186,7 +189,7 @@ def export_merged_udf(
 
     # -- 6. Compute reference outputs with numpy mirror ---------------------------
     ref_outputs = _numpy_mirror_eval(ref_states, weights_dict, comp_mean, comp_scale,
-                                     thermo_sc, spec)
+                                     thermo_sc, spec, energy_aux)
 
     # -- 7. Compute reference outputs with torch model ---------------------------
     torch_outputs = _torch_eval(ref_states, bundle_dir, weights_dict, comp_mean,
@@ -202,14 +205,18 @@ def export_merged_udf(
     # Header
     h_path = out_dir / "merged_coil_udf.h"
     h_path.write_text(
-        _render_header(spec, weights_dict, comp_mean, comp_scale, thermo_sc),
+        _render_header(spec, weights_dict, comp_mean, comp_scale, thermo_sc, energy_aux),
         encoding="utf-8",
     )
     artifacts["header"] = h_path
 
     # UDF source
     c_path = out_dir / "merged_coil_udf.c"
-    c_path.write_text(_render_udf_source(spec), encoding="utf-8")
+    c_path.write_text(
+        _render_udf_source(spec, energy_aux is not None,
+                           use_transport=weights_dict.get("n_transport", 0) > 0),
+        encoding="utf-8",
+    )
     artifacts["udf_source"] = c_path
 
     # TUI setup script
@@ -221,7 +228,7 @@ def export_merged_udf(
     ft_path = out_dir / "merged_coil_forward_test.c"
     ft_path.write_text(
         _render_forward_test(spec, ref_states, ref_outputs, weights_dict,
-                             comp_mean, comp_scale, thermo_sc),
+                             comp_mean, comp_scale, thermo_sc, energy_aux),
         encoding="utf-8",
     )
     artifacts["forward_test"] = ft_path
@@ -304,6 +311,57 @@ def _load_scalers(bundle_dir: Path) -> dict:
         return pickle.load(fh)
 
 
+def _load_energy_thermo(spec: dict[str, Any], scalers: dict) -> dict[str, Any] | None:
+    """Build the NASA7 + rate-scaler bundle for the rate-derived energy path (proposal #1).
+
+    The deployed energy source is recomputed in C as the first-law identity
+    ``S_E = -Σ h_i(T)·ω̇_i`` from the rate head + NASA7 enthalpy, instead of the fragile distilled
+    softplus head (val R² 0.096, the §5-gate-failing path).  This returns everything the mirror,
+    header and forward test need to do that consistently; returns ``None`` (with a warning) if the
+    mechanism YAML or the rate scaler is unavailable, in which case codegen falls back to the
+    legacy head-only energy path.
+
+    Returns a dict with: ``thermo`` (SpeciesThermo over the energy-active species), the NASA7
+    arrays (``nasa_low``/``nasa_high`` (n_active,7), ``t_mid`` (n_active,), ``molar_mass``
+    (n_active,)) and the rate ArcsinhScaler params (``rate_asinh_scale``, ``rate_std_mean``,
+    ``rate_std_scale``, each (n_active,)).
+    """
+    import warnings
+
+    energy_active = spec.get("energy_active") or spec.get("target")
+    mech_yaml = spec.get("mech_yaml")
+    rate_scaler = scalers.get("rate_scaler")
+    if not energy_active or not mech_yaml or rate_scaler is None:
+        warnings.warn(
+            "codegen: rate-derived energy path unavailable (missing energy_active / mech_yaml / "
+            "rate_scaler); falling back to the distilled-head energy path."
+        )
+        return None
+    try:
+        from scarfs.models.thermo import SpeciesThermo
+        thermo = SpeciesThermo.from_mechanism_yaml(mech_yaml, list(energy_active))
+    except Exception as exc:  # noqa: BLE001
+        warnings.warn(f"codegen: could not load NASA7 thermo ({exc}); head-only energy path.")
+        return None
+    try:
+        rate_asinh_scale = np.asarray(rate_scaler.scale_, dtype=float)
+        rate_std_mean = np.asarray(rate_scaler._std.mean_, dtype=float)
+        rate_std_scale = np.asarray(rate_scaler._std.scale_, dtype=float)
+    except AttributeError as exc:
+        warnings.warn(f"codegen: rate scaler missing expected params ({exc}); head-only path.")
+        return None
+    return {
+        "thermo": thermo,
+        "nasa_low": np.asarray(thermo._coeffs_low, dtype=float),
+        "nasa_high": np.asarray(thermo._coeffs_high, dtype=float),
+        "t_mid": np.asarray(thermo._t_mid, dtype=float),
+        "molar_mass": np.asarray(thermo.molar_mass, dtype=float),
+        "rate_asinh_scale": rate_asinh_scale,
+        "rate_std_mean": rate_std_mean,
+        "rate_std_scale": rate_std_scale,
+    }
+
+
 def _load_model_weights(
     bundle_dir: Path, spec: dict[str, Any]
 ) -> tuple[dict[str, Any], bool]:
@@ -351,6 +409,10 @@ def _load_model_weights(
     rate_sizes = _infer_mlp_sizes(state_dict, "rate_net", n_dry)
     en_sizes = _infer_mlp_sizes(state_dict, "energy_net", n_dry)
 
+    # Optional transport-property head (μ, k, …): present only when trained with transport_outputs>0.
+    n_transport = int(state_dict["transport_scale"].shape[0]) if "transport_scale" in state_dict else 0
+    tp_sizes = _infer_mlp_sizes(state_dict, "transport_net", n_dry) if n_transport > 0 else {"hidden": ()}
+
     # Instantiate MergedCoil with correct dims
     model = MergedCoil(
         n_dry=n_dry,
@@ -363,6 +425,8 @@ def _load_model_weights(
         energy_hidden=en_sizes["hidden"],
         activation="silu",
         spectral_norm=False,
+        n_transport=n_transport,
+        transport_hidden=tp_sizes["hidden"] or (64, 64),
     )
 
     # Load state dict (strict=False tolerates extra keys from parametrizations)
@@ -376,6 +440,7 @@ def _load_model_weights(
         "n_energy_active": n_energy_active,
         "k": k,
         "n_thermo": n_thermo,
+        "n_transport": n_transport,
         "energy_scale": float(model.energy_scale.detach().cpu().numpy()),
         "energy_floor": float(model.energy_floor.detach().cpu().numpy()),
         "encoder_W": model.encoder.weight.detach().cpu().numpy(),  # (k, n_dry)
@@ -384,6 +449,10 @@ def _load_model_weights(
         "rate_layers": _extract_mlp_layers(model.rate_net),
         "energy_layers": _extract_mlp_layers(model.energy_net),
     }
+    if n_transport > 0:
+        weights_dict["transport_layers"] = _extract_mlp_layers(model.transport_net)
+        weights_dict["transport_scale"] = model.transport_scale.detach().cpu().numpy()
+        weights_dict["transport_floor"] = model.transport_floor.detach().cpu().numpy()
     return weights_dict, spec_norm
 
 
@@ -630,13 +699,16 @@ def _numpy_mirror_eval(
     comp_scale: np.ndarray,
     thermo_sc,
     spec: dict[str, Any],
+    energy_aux: dict[str, Any] | None = None,
 ) -> dict[str, np.ndarray]:
     """Evaluate the MergedCoil in numpy for every reference state.
 
     Returns dict with keys:
       y_decoded   (B, n_dry) decoded standardised composition, post-inversion to mass fractions
       omega_z     (B, k)     latent source
-      s_h         (B,)       energy source = -absorption_head(z, q) [J/m3/s], clamped
+      s_h         (B,)       energy source = -absorption_head(z, q) [J/m3/s], clamped (head path)
+      s_h_rate    (B,)       energy source = -Σ h_i·ω̇_i [J/m3/s], clamped (rate path — DEPLOYED
+                             primary; present only when ``energy_aux`` is supplied)
     """
     Y_in = ref_states["Y_in"]       # (B, n_dry)  raw mass fractions
     T = ref_states["T"]             # (B,)
@@ -701,13 +773,31 @@ def _numpy_mirror_eval(
     if over.any():
         y_mass[over] = y_mass[over] / sum_retained[over]
 
-    return {
+    out = {
         "y_decoded": y_mass,
         "omega_z": omega_z,
         "s_h": s_h,
         "z": z,
         "z_proj": z_proj,
     }
+
+    # Rate-derived energy path (proposal #1): the DEPLOYED primary. Invert the rate head's
+    # ArcsinhScaler to physical mass rates ρ·dY/dt, then S_E = Σ rate_mass_i · h_mass_i(T_true).
+    # Rates use the NN-clamped q (q_nn); enthalpy uses the true cell T — matching the C exactly.
+    if energy_aux is not None:
+        rate_scaled = _numpy_forward(z_proj, q_nn, weights_dict["rate_layers"])  # (B, n_active)
+        a = rate_scaled * energy_aux["rate_std_scale"] + energy_aux["rate_std_mean"]
+        a = np.clip(a, -30.0, 30.0)
+        rates_mass = np.sinh(a) * energy_aux["rate_asinh_scale"]                 # (B, n_active)
+        h = energy_aux["thermo"].h_mass(T)                                       # (B, n_active) @ true T
+        absorption_rate = np.sum(rates_mass * h, axis=1)                         # (B,)
+        s_h_rate = -absorption_rate
+        s_h_rate = np.where(np.abs(s_h_rate) > energy_clamp,
+                            np.sign(s_h_rate) * energy_clamp, s_h_rate)
+        out["absorption_rate"] = absorption_rate
+        out["s_h_rate"] = s_h_rate
+
+    return out
 
 
 def _build_thermo_features(T: np.ndarray, P: np.ndarray) -> np.ndarray:
@@ -1043,7 +1133,10 @@ def _render_weights_for_net(
 def _max_layer_width(weights_dict: dict[str, Any]) -> int:
     """Find the maximum layer width across all sub-networks."""
     dims = []
-    for net_key in ("decoder_layers", "latent_source_layers", "rate_layers", "energy_layers"):
+    net_keys = ["decoder_layers", "latent_source_layers", "rate_layers", "energy_layers"]
+    if weights_dict.get("n_transport", 0) > 0 and "transport_layers" in weights_dict:
+        net_keys.append("transport_layers")
+    for net_key in net_keys:
         for d in weights_dict[net_key]:
             if d["type"] == "linear":
                 dims.extend([int(d["W"].shape[0]), int(d["W"].shape[1])])
@@ -1065,6 +1158,7 @@ def _render_header(
     comp_mean: np.ndarray,
     comp_scale: np.ndarray,
     thermo_sc,
+    energy_aux: dict[str, Any] | None = None,
 ) -> str:
     """Render merged_coil_udf.h with all static const arrays."""
     stats = spec["export_stats"]
@@ -1100,7 +1194,8 @@ def _render_header(
         "#define MC_UDM_LAST_SH          3   /* last computed S_h [J/m3/s] */",
         "#define MC_UDM_Z_START          4   /* latent z_i: slots 4 .. 4+MC_K-1 */",
         f"#define MC_UDM_Y_START          {4 + k}  /* decoded Y_i: slots {4+k} .. {4+k+n_dry-1} */",
-        f"#define MC_TOTAL_UDM            {4 + k + n_dry}",
+        f"#define MC_UDM_ABS_HEAD         {4 + k + n_dry}  /* distilled-head absorption cross-check */",
+        f"#define MC_TOTAL_UDM            {4 + k + n_dry + 1}",
         "",
         "/* --- Safety clamps --- */",
         "/* MC_ENERGY_CLAMP is a SAFETY clamp (≈1.3× train max absorption) far above",
@@ -1159,6 +1254,38 @@ def _render_header(
         "/* S_h = -absorption  [J/m3/s] (minus = endothermic sink for Fluent). */",
         _render_weights_for_net("MC_EN", weights_dict["energy_layers"]),
         "",
+    ]
+
+    if weights_dict.get("n_transport", 0) > 0 and "transport_layers" in weights_dict:
+        n_tp = int(weights_dict["n_transport"])
+        lines += [
+            "/* --- Transport-property head (μ, k, …): property = softplus(raw)*scale + floor (>0) --- */",
+            f"#define MC_N_TRANSPORT  {n_tp}",
+            _c_double_array("MC_TRANSPORT_SCALE", np.asarray(weights_dict["transport_scale"])),
+            _c_double_array("MC_TRANSPORT_FLOOR", np.asarray(weights_dict["transport_floor"])),
+            _render_weights_for_net("MC_TP", weights_dict["transport_layers"]),
+            "",
+        ]
+
+    if energy_aux is not None:
+        from scarfs.models.thermo import R_J_PER_KMOL_K
+        lines += [
+            "/* --- Rate-derived energy path (DEPLOYED primary): S_E = -Σ h_i(T)·ω̇_i --- */",
+            "/* NASA7 enthalpy of the energy-active species + the rate-head ArcsinhScaler inverse, */",
+            "/* so the C UDF recomputes the energy source from the rate head (val R²≈0.94) rather  */",
+            "/* than the fragile distilled softplus head (val R²≈0.10). See codegen proposal #1.   */",
+            f"#define MC_R_GAS  {_fmt(R_J_PER_KMOL_K)}  /* universal gas constant [J/(kmol K)] */",
+            _c_double_array("MC_NASA_LOW", energy_aux["nasa_low"].ravel()),
+            _c_double_array("MC_NASA_HIGH", energy_aux["nasa_high"].ravel()),
+            _c_double_array("MC_NASA_TMID", energy_aux["t_mid"]),
+            _c_double_array("MC_MOLAR_MASS", energy_aux["molar_mass"]),
+            _c_double_array("MC_RATE_ASINH_SCALE", energy_aux["rate_asinh_scale"]),
+            _c_double_array("MC_RATE_STD_MEAN", energy_aux["rate_std_mean"]),
+            _c_double_array("MC_RATE_STD_SCALE", energy_aux["rate_std_scale"]),
+            "",
+        ]
+
+    lines += [
         "#endif  /* MERGED_COIL_UDF_H */",
         "",
     ]
@@ -1169,10 +1296,223 @@ def _render_header(
 # UDF C source generation
 # ---------------------------------------------------------------------------
 
-def _render_udf_source(spec: dict[str, Any]) -> str:
-    """Render merged_coil_udf.c with all Fluent DEFINE_* hooks."""
+# Shared C helpers for the rate-derived energy path (proposal #1). Injected verbatim into BOTH the
+# UDF source and the standalone forward test so the two never diverge. Uses only header macros —
+# no Python interpolation, so plain (single-brace) C is correct here.
+_RATE_ENERGY_C_HELPERS = r"""
+/* ---- Rate-derived energy path: S_E = -sum_i h_i(T) * omega_dot_i (first law) ---- */
+
+/* Rate head (scaled arcsinh space) -> physical mass rates rho*dY/dt [kg/m3/s].
+ * Inverts the ArcsinhScaler: x = sinh(scaled*std_scale + std_mean) * asinh_scale.
+ * The pre-sinh clip at +/-30 is a pure overflow guard (sinh(30)~5e12), not a learning bound. */
+static void mc_rates_physical(const double *z_proj, const double *q, double *rates_mass)
+{
+    double zq[MC_K + MC_N_THERMO];
+    double scaled[MC_N_ACTIVE];
+    int i;
+    for (i = 0; i < MC_K; ++i) zq[i] = z_proj[i];
+    for (i = 0; i < MC_N_THERMO; ++i) zq[MC_K + i] = q[i];
+    mc_net_eval(MC_RATE_N_LAYERS, MC_RATE_LAYER_TYPES, MC_RATE_N_LINEAR,
+                MC_RATE_IN, MC_RATE_OUT, MC_RATE_W, MC_RATE_B,
+                MC_RATE_N_LN, MC_RATE_LN_GAMMA, MC_RATE_LN_BETA, MC_RATE_LN_EPS_ARR,
+                zq, scaled);
+    for (i = 0; i < MC_N_ACTIVE; ++i) {
+        double a = scaled[i] * MC_RATE_STD_SCALE[i] + MC_RATE_STD_MEAN[i];
+        if (a > 30.0) a = 30.0;
+        if (a < -30.0) a = -30.0;
+        rates_mass[i] = sinh(a) * MC_RATE_ASINH_SCALE[i];
+    }
+}
+
+/* NASA7 mass-specific enthalpy h_i(T) [J/kg] for each energy-active species (incl. formation). */
+static void mc_h_mass(double T, double *h)
+{
+    int i;
+    double Tt = (T > 1.0e-300) ? T : 1.0e-300;
+    double T2 = Tt * Tt, T3 = T2 * Tt, T4 = T3 * Tt;
+    for (i = 0; i < MC_N_ACTIVE; ++i) {
+        const double *a = (Tt > MC_NASA_TMID[i]) ? &MC_NASA_HIGH[i * 7] : &MC_NASA_LOW[i * 7];
+        double h_rt = a[0] + a[1]*Tt/2.0 + a[2]*T2/3.0 + a[3]*T3/4.0 + a[4]*T4/5.0 + a[5]/Tt;
+        h[i] = (MC_R_GAS * Tt * h_rt) / MC_MOLAR_MASS[i];
+    }
+}
+
+/* Rate-derived volumetric absorption [J/m3/s]. No max(0,.) floor: a small negative (exothermic)
+ * value at low conversion is physical and must be preserved — only the safety MC_ENERGY_CLAMP
+ * bounds the magnitude at the call site. */
+static double mc_absorption_from_rates(const double *z_proj, const double *q, double T)
+{
+    double rates_mass[MC_N_ACTIVE], h[MC_N_ACTIVE];
+    double s = 0.0;
+    int i;
+    mc_rates_physical(z_proj, q, rates_mass);
+    mc_h_mass(T, h);
+    for (i = 0; i < MC_N_ACTIVE; ++i) s += rates_mass[i] * h[i];
+    return s;
+}
+"""
+
+
+# Energy DEFINE_SOURCE: rate-derived primary (with head cross-check + OOD fallback), or legacy head.
+_ENERGY_SOURCE_RATE = r"""/* DEFINE_SOURCE energy: S_h = -absorption recomputed from the rate head + NASA7 (PRIMARY).
+ * The distilled softplus head is kept as a UDM cross-check and the out-of-envelope fallback. */
+DEFINE_SOURCE(mc_energy_source, c, t, dS, eqn)
+{
+    double z_raw[MC_K], z[MC_K], z_proj[MC_K], q[MC_N_THERMO];
+    double absorption_rate, absorption_head, absorption, sh;
+    double T = C_T(c, t);
+    double P = C_P(c, t) + MC_OPERATING_PRESSURE_PA;
+    int i, ood;
+
+    for (i = 0; i < MC_K; ++i) z_raw[i] = C_UDSI(c, t, i);
+    mc_build_q(T, P, q);
+    ood = mc_clamp_latent(z_raw, z);
+    mc_project(z, q, z_proj, NULL);
+
+    absorption_rate = mc_absorption_from_rates(z_proj, q, T);  /* first-law, true cell T */
+    absorption_head = mc_absorption(z_proj, q);                /* cross-check / OOD fallback */
+    C_UDMI(c, t, MC_UDM_ABS_HEAD) = absorption_head;
+
+    /* In-envelope: trust the rate-derived path (val R2~0.94). Out-of-envelope (latent clamped):
+     * the unbounded rate sum is less trustworthy than the softplus-bounded head, so fall back. */
+    absorption = ood ? absorption_head : absorption_rate;
+    sh = -absorption;
+
+    if (sh > MC_ENERGY_CLAMP) {
+        sh = MC_ENERGY_CLAMP;
+        C_UDMI(c, t, MC_UDM_ENERGY_CLAMP_CNT) += 1.0;
+    } else if (sh < -MC_ENERGY_CLAMP) {
+        sh = -MC_ENERGY_CLAMP;
+        C_UDMI(c, t, MC_UDM_ENERGY_CLAMP_CNT) += 1.0;
+    }
+    C_UDMI(c, t, MC_UDM_LAST_SH) = sh;
+
+    dS[eqn] = 0.0;
+    return (real)sh;
+}"""
+
+_ENERGY_SOURCE_HEAD = r"""/* DEFINE_SOURCE for energy equation: S_h = -absorption_head(z, q) (distilled head only) */
+DEFINE_SOURCE(mc_energy_source, c, t, dS, eqn)
+{
+    double z_raw[MC_K], z[MC_K], z_proj[MC_K], q[MC_N_THERMO];
+    double absorption, sh;
+    double T = C_T(c, t);
+    double P = C_P(c, t) + MC_OPERATING_PRESSURE_PA;
+    int i;
+
+    for (i = 0; i < MC_K; ++i) z_raw[i] = C_UDSI(c, t, i);
+    mc_build_q(T, P, q);
+    mc_clamp_latent(z_raw, z);
+    mc_project(z, q, z_proj, NULL);
+
+    absorption = mc_absorption(z_proj, q);
+    sh = -absorption;
+
+    if (sh > MC_ENERGY_CLAMP) {
+        sh = MC_ENERGY_CLAMP;
+        C_UDMI(c, t, MC_UDM_ENERGY_CLAMP_CNT) += 1.0;
+    } else if (sh < -MC_ENERGY_CLAMP) {
+        sh = -MC_ENERGY_CLAMP;
+        C_UDMI(c, t, MC_UDM_ENERGY_CLAMP_CNT) += 1.0;
+    }
+    C_UDMI(c, t, MC_UDM_LAST_SH) = sh;
+
+    dS[eqn] = 0.0;
+    return (real)sh;
+}"""
+
+
+# Forward-test check block for the rate-derived energy path (injected into main()'s ref loop).
+# Uses the inlined MC_ENERGY_CLAMP macro and the REF_T / REF_SH_RATE reference arrays.
+_RATE_FT_CHECK = r"""
+        /* Rate-derived energy path (the DEPLOYED primary): S_h = -sum_i h_i(T)*omega_i */
+        {
+            double absr = mc_absorption_from_rates(z_proj, q, REF_T[ref]);
+            double shr = -absr;
+            double ref_shr = REF_SH_RATE[ref];
+            double denom = fabs(ref_shr) > 1.0e-30 ? fabs(ref_shr) : 1.0e-30;
+            double rel;
+            if (shr >  MC_ENERGY_CLAMP) shr =  MC_ENERGY_CLAMP;
+            if (shr < -MC_ENERGY_CLAMP) shr = -MC_ENERGY_CLAMP;
+            rel = fabs(shr - ref_shr) / denom;
+            if (rel > rel_tol) {
+                printf("FAIL ref=%d sh_rate: got %.17g expected %.17g rel=%.4e\n",
+                       ref, shr, ref_shr, rel);
+                fail = 1;
+            }
+        }
+"""
+
+
+# Transport-property DEFINE_PROPERTY hooks (proposal #5 C export). Injected only when a transport
+# head was trained (n_transport>0); uses Fluent cell/thread types so it lives in the UDF source only.
+_TRANSPORT_C_DEFS = r"""
+/* ---- Transport-property head (μ, k, …): state-dependent DEFINE_PROPERTY closures ---- */
+static void mc_transport_vec(const double *z_proj, const double *q, double *out)
+{
+    double zq[MC_K + MC_N_THERMO];
+    double raw[MC_N_TRANSPORT];
+    int i;
+    for (i = 0; i < MC_K; ++i) zq[i] = z_proj[i];
+    for (i = 0; i < MC_N_THERMO; ++i) zq[MC_K + i] = q[i];
+    mc_net_eval(MC_TP_N_LAYERS, MC_TP_LAYER_TYPES, MC_TP_N_LINEAR,
+                MC_TP_IN, MC_TP_OUT, MC_TP_W, MC_TP_B,
+                MC_TP_N_LN, MC_TP_LN_GAMMA, MC_TP_LN_BETA, MC_TP_LN_EPS_ARR,
+                zq, raw);
+    for (i = 0; i < MC_N_TRANSPORT; ++i)
+        out[i] = mc_softplus(raw[i]) * MC_TRANSPORT_SCALE[i] + MC_TRANSPORT_FLOOR[i];
+}
+
+/* Build the projected latent + thermo features at a cell (shared by the property hooks) */
+static void mc_cell_zproj(cell_t c, Thread *t, double *z_proj, double *q)
+{
+    double z_raw[MC_K], z[MC_K];
+    double T = C_T(c, t);
+    double P = C_P(c, t) + MC_OPERATING_PRESSURE_PA;
+    int i;
+    for (i = 0; i < MC_K; ++i) z_raw[i] = C_UDSI(c, t, i);
+    mc_build_q(T, P, q);
+    mc_clamp_latent(z_raw, z);
+    mc_project(z, q, z_proj, NULL);
+}
+
+/* DEFINE_PROPERTY: mixture dynamic viscosity [Pa s] (transport head output 0).
+ * Hook in Fluent: Materials > <mixture> > Viscosity > user-defined > mc_viscosity. */
+DEFINE_PROPERTY(mc_viscosity, c, t)
+{
+    double z_proj[MC_K], q[MC_N_THERMO], out[MC_N_TRANSPORT];
+    mc_cell_zproj(c, t, z_proj, q);
+    mc_transport_vec(z_proj, q, out);
+    return (real)out[0];
+}
+
+/* DEFINE_PROPERTY: mixture thermal conductivity [W/m/K] (transport head output 1).
+ * Hook in Fluent: Materials > <mixture> > Thermal Conductivity > user-defined > mc_thermal_conductivity. */
+DEFINE_PROPERTY(mc_thermal_conductivity, c, t)
+{
+    double z_proj[MC_K], q[MC_N_THERMO], out[MC_N_TRANSPORT];
+    mc_cell_zproj(c, t, z_proj, q);
+    mc_transport_vec(z_proj, q, out);
+    return (real)out[1];
+}
+"""
+
+
+def _render_udf_source(
+    spec: dict[str, Any], use_rate_energy: bool = False, use_transport: bool = False
+) -> str:
+    """Render merged_coil_udf.c with all Fluent DEFINE_* hooks.
+
+    When *use_rate_energy* is True the deployed energy DEFINE_SOURCE recomputes
+    ``S_h = -Σ h_i·ω̇_i`` from the rate head + NASA7 (proposal #1); otherwise it uses the
+    legacy distilled-head path.  When *use_transport* is True, DEFINE_PROPERTY hooks for
+    viscosity and thermal conductivity are emitted from the transport head (proposal #5).
+    """
     k = len(spec.get("latent_env_min", spec["export_stats"]["latent_env_min"]))
     k = len(spec["export_stats"]["latent_env_min"])
+    rate_helpers = _RATE_ENERGY_C_HELPERS if use_rate_energy else ""
+    energy_source_def = _ENERGY_SOURCE_RATE if use_rate_energy else _ENERGY_SOURCE_HEAD
+    transport_defs = _TRANSPORT_C_DEFS if use_transport else ""
 
     uds_sources = "\n".join(
         f"""DEFINE_SOURCE(mc_latent_uds_{i}_source, c, t, dS, eqn)
@@ -1377,7 +1717,7 @@ static double mc_absorption(const double *z_proj, const double *q)
                 zq, raw);
     return mc_softplus(raw[0]) * MC_ENERGY_SCALE + MC_ENERGY_FLOOR;
 }}
-
+{rate_helpers}
 /* Decode standardised composition to physical mass fractions with closure */
 static void mc_decode_composition(const double *z, const double *q, double *Y_out)
 {{
@@ -1467,36 +1807,7 @@ DEFINE_ADJUST(mc_manifold_project, domain)
 #endif
 }}
 
-/* DEFINE_SOURCE for energy equation: S_h = -absorption_head(z, q) */
-DEFINE_SOURCE(mc_energy_source, c, t, dS, eqn)
-{{
-    double z_raw[MC_K], z[MC_K], z_proj[MC_K], q[MC_N_THERMO];
-    double absorption, sh;
-    double T = C_T(c, t);
-    double P = C_P(c, t) + MC_OPERATING_PRESSURE_PA;
-    int i;
-
-    for (i = 0; i < MC_K; ++i) z_raw[i] = C_UDSI(c, t, i);
-    mc_build_q(T, P, q);
-    mc_clamp_latent(z_raw, z);
-    mc_project(z, q, z_proj, NULL);
-
-    absorption = mc_absorption(z_proj, q);
-    sh = -absorption;
-
-    /* Safety clamp: |S_h| <= MC_ENERGY_CLAMP (far above signal; not prediction-falsifying) */
-    if (sh > MC_ENERGY_CLAMP) {{
-        sh = MC_ENERGY_CLAMP;
-        C_UDMI(c, t, MC_UDM_ENERGY_CLAMP_CNT) += 1.0;
-    }} else if (sh < -MC_ENERGY_CLAMP) {{
-        sh = -MC_ENERGY_CLAMP;
-        C_UDMI(c, t, MC_UDM_ENERGY_CLAMP_CNT) += 1.0;
-    }}
-    C_UDMI(c, t, MC_UDM_LAST_SH) = sh;
-
-    dS[eqn] = 0.0;  /* linearisation coefficient */
-    return (real)sh;
-}}
+{energy_source_def}
 
 /* UDS source functions: S_i = rho * omega_Z_i */
 static double mc_latent_source(cell_t c, Thread *t, int dim)
@@ -1512,7 +1823,7 @@ static double mc_latent_source(cell_t c, Thread *t, int dim)
     mc_latent_source_vec(z_proj, q, omega_z);
     return C_R(c, t) * omega_z[dim];
 }}
-
+{transport_defs}
 {uds_sources}
 """
 
@@ -1526,7 +1837,7 @@ def _render_tui_setup(spec: dict[str, Any]) -> str:
     stats = spec["export_stats"]
     k = len(stats["latent_env_min"])
     n_dry = len(spec["input"])
-    total_udm = 4 + k + n_dry
+    total_udm = 5 + k + n_dry  # +1 for MC_UDM_ABS_HEAD (rate-vs-head energy cross-check)
 
     lines = [
         "; SCARFS MergedCoil Fluent TUI setup script",
@@ -1586,6 +1897,7 @@ def _render_forward_test(
     comp_mean: np.ndarray,
     comp_scale: np.ndarray,
     thermo_sc,
+    energy_aux: dict[str, Any] | None = None,
 ) -> str:
     """Render merged_coil_forward_test.c — standalone, no udf.h, embeds reference vectors."""
     stats = spec["export_stats"]
@@ -1620,8 +1932,20 @@ def _render_forward_test(
     omega_z_lines = _arr("REF_OMEGA_Z", omega_z_ref)
     s_h_lines = _arr("REF_SH", s_h_ref)
 
-    # Inline the header content (no #include "merged_coil_udf.h" — standalone)
-    header_body = _render_header(spec, weights_dict, comp_mean, comp_scale, thermo_sc)
+    # Rate-derived energy reference (proposal #1): embed raw T and the mirror's s_h_rate so the
+    # compiled C check exercises the DEPLOYED primary path at the strict 1e-6 parity gate.
+    use_rate = energy_aux is not None and "s_h_rate" in ref_outputs
+    if use_rate:
+        ref_t_lines = _c_double_array("REF_T", np.asarray(T, dtype=float).ravel(), per_line=4)
+        ref_sh_rate_lines = _arr("REF_SH_RATE", ref_outputs["s_h_rate"])
+        rate_helpers_ft = _RATE_ENERGY_C_HELPERS
+        rate_check_block = _RATE_FT_CHECK
+    else:
+        ref_t_lines = ref_sh_rate_lines = rate_helpers_ft = rate_check_block = ""
+
+    # Inline the header content (no #include "merged_coil_udf.h" — standalone). Pass energy_aux so
+    # the NASA7 / rate-scaler arrays the rate-derived check needs are present in the inlined header.
+    header_body = _render_header(spec, weights_dict, comp_mean, comp_scale, thermo_sc, energy_aux)
     # Remove ONLY the outer include guards and #include directives.
     # Do NOT strip inner #ifndef / #endif blocks (e.g. MC_OPERATING_PRESSURE_PA guard).
     guard_lines = {
@@ -1655,6 +1979,8 @@ def _render_forward_test(
 {q_lines}
 {omega_z_lines}
 {s_h_lines}
+{ref_t_lines}
+{ref_sh_rate_lines}
 
 /* ---- Shared C utilities (mirror of udf source, no Fluent types) ---- */
 static double mc_max(double a, double b) {{ return a > b ? a : b; }}
@@ -1799,7 +2125,7 @@ static double mc_absorption(const double *z_proj, const double *q)
                 zq, raw);
     return mc_softplus(raw[0]) * MC_ENERGY_SCALE + MC_ENERGY_FLOOR;
 }}
-
+{rate_helpers_ft}
 /* ---- Forward-test main ---- */
 int main(void)
 {{
@@ -1858,6 +2184,7 @@ int main(void)
                 fail = 1;
             }}
         }}
+{rate_check_block}
     }}
 
     if (!fail)

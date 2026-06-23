@@ -527,3 +527,87 @@ class TestExportResultFields:
         result, _ = export_result
         report = result.artifacts["consistency_report"].read_text(encoding="utf-8")
         assert "PASS" in report or "WARN" in report
+
+
+class TestRateDerivedEnergy:
+    """Proposal #1: the deployed energy source is recomputed from the rate head + NASA7
+    (S_E = -Σ h_i·ω̇_i), not the distilled softplus head. The compiled forward test
+    (TestCForwardTest) validates the path numerically at 1e-6; these check the wiring."""
+
+    def test_header_has_nasa7_and_rate_scaler_arrays(self, export_result):
+        result, _ = export_result
+        h = result.artifacts["header"].read_text(encoding="utf-8")
+        for tok in ("#define MC_R_GAS", "MC_NASA_LOW", "MC_NASA_HIGH", "MC_NASA_TMID",
+                    "MC_MOLAR_MASS", "MC_RATE_ASINH_SCALE", "MC_RATE_STD_MEAN",
+                    "MC_RATE_STD_SCALE", "MC_UDM_ABS_HEAD"):
+            assert tok in h, f"header missing {tok}"
+
+    def test_energy_source_uses_rate_derived_path(self, export_result):
+        result, _ = export_result
+        c = result.artifacts["udf_source"].read_text(encoding="utf-8")
+        assert "mc_absorption_from_rates" in c, "energy source must use the rate-derived path"
+        assert "static void mc_rates_physical" in c
+        assert "static void mc_h_mass" in c
+        assert "MC_UDM_ABS_HEAD" in c, "distilled head must be kept as a cross-check UDM"
+
+    def test_forward_test_checks_rate_path(self, export_result):
+        result, _ = export_result
+        ft = result.artifacts["forward_test"].read_text(encoding="utf-8")
+        assert "REF_SH_RATE" in ft and "mc_absorption_from_rates" in ft
+
+
+def test_transport_property_export_compiles(tmp_path_factory):
+    """A bundle trained WITH transport heads (proposal #5) emits DEFINE_PROPERTY hooks for
+    viscosity and thermal conductivity, and the forward test still compiles."""
+    import pandas as pd
+
+    df = load_database(FIXTURE)
+    schema = infer_schema(df)
+    # The stride6 fixture lacks mu/k columns; add plausible ones so the transport head trains.
+    T = df["T [K]"].to_numpy(float)
+    df = df.copy()
+    df["mu [Pa-s]"] = 2.0e-5 + 1.0e-8 * (T - 900.0)
+    df["k [W/m/K]"] = 0.08 + 5.0e-5 * (T - 900.0)
+    aug = tmp_path_factory.mktemp("transport_db") / "aug.parquet"
+    df.to_parquet(aug)
+
+    seed = _non_degenerate_seed(load_database(aug), schema, val_fraction=0.3, test_fraction=0.25)
+    out_root = tmp_path_factory.mktemp("transport_bundle")
+    cfg = TrainConfig(
+        data=DataConfig(
+            database_path=str(aug), input_species="dry_all", target_species="energy_active",
+            val_fraction=0.3, test_fraction=0.25, split_by_case=True,
+            energy_active_coverage=0.999, mech_yaml=str(MECH_YAML), seed=seed,
+        ),
+        model=ModelConfig(
+            kind="merged", latent_dim=2, decoder_hidden=(8,), rate_hidden=(8,),
+            latent_source_hidden=(8,), energy_hidden=(8,),
+            transport_outputs=2, transport_hidden=(8,),
+        ),
+        optim=OptimConfig(lr=1e-3, epochs=2, batch_size=256, patience=5),
+        loss=LossConfig(transport_weight=0.05),
+        output_dir=str(out_root / "run"),
+    )
+    train(cfg)
+
+    out_dir = tmp_path_factory.mktemp("transport_out")
+    result = export_merged_udf(out_root / "run", out_dir, n_reference_states=4)
+
+    header = result.artifacts["header"].read_text(encoding="utf-8")
+    udf = result.artifacts["udf_source"].read_text(encoding="utf-8")
+    assert "#define MC_N_TRANSPORT  2" in header
+    assert "MC_TRANSPORT_SCALE" in header and "MC_TP_W" in header
+    assert "DEFINE_PROPERTY(mc_viscosity" in udf
+    assert "DEFINE_PROPERTY(mc_thermal_conductivity" in udf
+    assert "static void mc_transport_vec" in udf
+
+    # The standalone forward test must still compile with the transport arrays in the header.
+    cc = shutil.which("cc") or shutil.which("gcc")
+    if cc:
+        ft = result.artifacts["forward_test"]
+        exe = out_dir / "mc_fwd_test"
+        proc = subprocess.run([cc, "-O0", "-lm", str(ft), "-o", str(exe)],
+                              capture_output=True, text=True, timeout=60)
+        assert proc.returncode == 0, f"forward test failed to compile:\n{proc.stderr}"
+        run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
+        assert run.returncode == 0, f"forward test failed at runtime:\n{run.stdout}"
