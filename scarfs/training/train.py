@@ -36,7 +36,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pickle
+import time
 import warnings
 from dataclasses import asdict
 from pathlib import Path
@@ -979,6 +981,8 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
 
     history: list[dict] = []
     best_val, best_state, since = float("inf"), None, 0
+    _progress = os.environ.get("SCARFS_PROGRESS")
+    _t0 = time.perf_counter()
 
     for epoch in range(cfg.optim.epochs):
         tr, tr_parts = _epoch(model, cfg, bundle, optimiser, train=True)
@@ -989,13 +993,20 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         monitor = _val_energy_relrmse() if use_energy_ckpt else (va if np.isfinite(va) else tr)
         history.append({"epoch": epoch, "train": tr, "val": va,
                         "train_parts": tr_parts, "val_parts": va_parts})
-        if monitor < best_val:
+        improved = monitor < best_val
+        if improved:
             best_val, since = monitor, 0
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
         else:
             since += 1
-            if since >= cfg.optim.patience:
-                break
+        if _progress:  # env-gated heartbeat (no numeric effect); set SCARFS_PROGRESS=1 to enable
+            _el = time.perf_counter() - _t0
+            _eta = _el / (epoch + 1) * max(cfg.optim.epochs - epoch - 1, 0)
+            print(f"[merged {epoch+1}/{cfg.optim.epochs}] train={tr:.5f} val={va:.5f} "
+                  f"monitor={monitor:.6f} best={best_val:.6f}{' *' if improved else ''} "
+                  f"since={since}/{cfg.optim.patience} elapsed={_el:.0f}s eta={_eta:.0f}s", flush=True)
+        if not improved and since >= cfg.optim.patience:
+            break
     if best_state is not None:
         model.load_state_dict(best_state)
 
