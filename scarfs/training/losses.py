@@ -315,6 +315,49 @@ def lagrangian_rollout_loss(
     return _mse(z_tp1_pred, z_tp1_true).mean()
 
 
+def pushforward_species_loss(
+    model,
+    seq_ystd: torch.Tensor,      # (M, K+1, n_dry)  standardised composition along the τ-window
+    seq_q: torch.Tensor,         # (M, K+1, n_thermo) standardised thermo per step
+    seq_dtau: torch.Tensor,      # (M, K)            Δτ between steps [s]
+    arcsinh_latent_scale: torch.Tensor,   # (k,)
+    clamp: float = 50.0,
+) -> torch.Tensor:
+    """Multi-step pushforward rollout loss in DECODED-SPECIES space (closed-loop tracking, F2/RC-2).
+
+    Pushforward trick (Brandstetter et al.): roll the latent K steps feeding the model its OWN output
+    WITHOUT gradient (clamped, to reach the drifted states the deployed loop actually visits), then
+    take a SINGLE gradient step from each visited state, decode to standardised composition, and match
+    the TRUE next composition. Back-prop touches only the single step (not the whole unstable unroll →
+    no gradient explosion), yet trains E/D/ω_Z to CORRECT their own drift — the closed-loop tracking
+    that 1-step (Lagrangian) and contraction-only training cannot give.
+
+        z_0 = E·y(inlet);  visited[j] reached by the no-grad rollout
+        loss = mean_j ‖ decode( project(visited[j]) + Δτ·ω_Z(project(visited[j])) ) − y_true[j+1] ‖²
+    """
+    K = seq_dtau.shape[1]
+
+    def omega(zp, q):  # physical ω_Z = sinh(arcsinh-head)·s_Z (head emits arcsinh-space)
+        return torch.sinh(model.latent_source(zp, q).clamp(-20.0, 20.0)) * arcsinh_latent_scale.unsqueeze(0)
+
+    with torch.no_grad():                                  # collect the visited (drifted) states
+        z = model.encode(seq_ystd[:, 0, :]).clamp(-clamp, clamp)
+        visited = [z]
+        for j in range(1, K):
+            zp = model.project(z, seq_q[:, j, :])
+            z = (zp + seq_dtau[:, j - 1].unsqueeze(1) * omega(zp, seq_q[:, j, :])).clamp(-clamp, clamp)
+            visited.append(z)
+
+    loss = seq_ystd.new_zeros(())
+    for j in range(K):                                     # 1-step grad from each visited state
+        zin = visited[j].detach()
+        zp = model.project(zin, seq_q[:, j + 1, :])
+        z_next = zp + seq_dtau[:, j].unsqueeze(1) * omega(zp, seq_q[:, j + 1, :])
+        y_pred_std = model.decode(z_next, seq_q[:, j + 1, :])
+        loss = loss + _mse(y_pred_std, seq_ystd[:, j + 1, :]).mean()
+    return loss / K
+
+
 def atom_projection_penalty(
     rates_mass: torch.Tensor,
     molar_mass: torch.Tensor,
@@ -486,6 +529,12 @@ def merged_composite(
     transport_weight: float = 0.0,
     noise_std: float = 0.0,
     rollout_mode: str = "manifold",
+    # contraction penalty on the round-trip projection P=E∘D (a-posteriori stability)
+    contraction_weight: float = 0.0,
+    contraction_gain: float = 0.9,
+    contraction_eps: float = 0.1,
+    slow_manifold_weight: float = 0.0,
+    slow_manifold_gain: float = 0.5,
     # lagrangian rollout (optional)
     idx_t: torch.Tensor | None = None,
     idx_tp1: torch.Tensor | None = None,
@@ -677,6 +726,38 @@ def merged_composite(
         manifold = manifold_consistency(z_out, z_proj_out)
         total = total + manifold_weight * manifold
         parts["manifold"] = float(manifold.detach())
+
+    # -- 9b. Contraction of the round-trip projection P=E∘D (closed-loop stability) -------
+    # The deployed rollout advances z<-P(z)+Δτ·ω_Z(P(z)); it is stable iff P is non-expansive.
+    # Measured gain ≈6.6 ⇒ exponential drift. Penalise the directional gain exceeding the target
+    # for random latent perturbations, pushing grads into encoder+decoder to flatten the geometry.
+    if contraction_weight > 0.0:
+        delta = torch.randn_like(z_out)
+        delta = delta / (delta.norm(dim=1, keepdim=True) + 1e-12) * contraction_eps
+        p0 = model.project(z_out, q)
+        p1 = model.project(z_out + delta, q)
+        gain = (p1 - p0).norm(dim=1) / (delta.norm(dim=1) + 1e-12)
+        contraction = (torch.relu(gain - contraction_gain) ** 2).mean()
+        total = total + contraction_weight * contraction
+        parts["contraction"] = float(contraction.detach())
+        parts["contraction_gain_mean"] = float(gain.mean().detach())
+
+    # -- 9c. Slow-manifold (anisotropic) contraction: contract ONLY transverse-to-tangent modes ----
+    # The isotropic contraction over-damps the SLOW along-trajectory direction (→ wrong attractor).
+    # Here we contract only the FAST directions transverse to the trajectory tangent z_dot_true,
+    # leaving the slow mode free — the slow-manifold structure that gives Layer-2 attraction.
+    if slow_manifold_weight > 0.0:
+        t = z_dot_true / (z_dot_true.norm(dim=1, keepdim=True) + 1e-8)   # unit trajectory tangent
+        d = torch.randn_like(z_out)
+        d = d - (d * t).sum(dim=1, keepdim=True) * t                     # remove tangent ⇒ transverse
+        d = d / (d.norm(dim=1, keepdim=True) + 1e-12) * contraction_eps
+        p0 = model.project(z_out, q)
+        p1 = model.project(z_out + d, q)
+        gain_perp = (p1 - p0).norm(dim=1) / (d.norm(dim=1) + 1e-12)
+        slow = (torch.relu(gain_perp - slow_manifold_gain) ** 2).mean()
+        total = total + slow_manifold_weight * slow
+        parts["slow_manifold"] = float(slow.detach())
+        parts["slow_gain_perp_mean"] = float(gain_perp.mean().detach())
 
     # -- 10. Atom-balance (physical rates) -------------------------------------------------
     if atom_balance_weight > 0.0 and molar_mass is not None and element_matrix is not None and rates_pred is not None:

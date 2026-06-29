@@ -409,6 +409,47 @@ def case_step_pairs(
     )
 
 
+def case_step_sequences(
+    df: pd.DataFrame,
+    schema: Schema,
+    K: int,
+    stride: int = 1,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build K-step windows for the pushforward rollout loss.
+
+    For each case (rows sorted by τ), every ``stride``-th length-(K+1) window of consecutive rows
+    yields one sequence: the row indices ``(K+1,)`` and the K positive Δτ gaps. Only windows whose
+    Δτ are all > 0 are kept. Returns ``(seq_idx (n_seq, K+1) intp, dtau (n_seq, K) float)`` indexing
+    the passed (reset-index) DataFrame — i.e. the train-split row order, aligned with ``X_train``.
+    """
+    if "CaseID" not in schema.meta:
+        raise KeyError("case_step_sequences: 'CaseID' not in schema.meta")
+    if "tau" in schema.state:
+        tau_col = schema.state["tau"]
+    elif "z" in schema.state:
+        tau_col = schema.state["z"]
+    else:
+        raise KeyError("case_step_sequences: neither 'tau' nor 'z' found in schema.state")
+    case_col = schema.meta["CaseID"]
+    df = df.reset_index(drop=True)
+
+    seqs: list[np.ndarray] = []
+    dtaus: list[np.ndarray] = []
+    for _case_id, group in df.groupby(case_col, sort=False):
+        sorted_group = group.sort_values(tau_col)
+        idxs = sorted_group.index.to_numpy()
+        taus = sorted_group[tau_col].to_numpy(dtype=float)
+        for s in range(0, len(idxs) - K, max(1, stride)):
+            win = idxs[s: s + K + 1]
+            dt = np.diff(taus[s: s + K + 1])
+            if np.all(dt > 0):
+                seqs.append(win.astype(np.intp))
+                dtaus.append(dt.astype(float))
+    if not seqs:
+        return np.empty((0, K + 1), dtype=np.intp), np.empty((0, K), dtype=float)
+    return np.stack(seqs), np.stack(dtaus)
+
+
 # ---------------------------------------------------------------------------
 # DataBundle and prepare_data
 # ---------------------------------------------------------------------------
