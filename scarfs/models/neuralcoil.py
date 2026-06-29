@@ -172,12 +172,16 @@ class MergedCoil(nn.Module):
 
         k = latent_dim
         self.encoder = nn.Linear(n_dry, k, bias=False)
-        # Decoder: standardised-space output (no sigmoid — caller handles composition contract)
+        # Decoder: standardised-space output (no sigmoid — caller handles composition contract).
+        # spectral_norm here bounds the decoder's Lipschitz constant — the map D in the latent
+        # projection z<-E·D(z); contracting it is the targeted fix for the closed-loop latent-
+        # transport amplification found a-posteriori (2026-06-24).
         self.decoder = make_mlp(
             [k + n_thermo, *decoder_hidden, n_dry],
             activation=activation,
             layernorm=False,
             final_activation=None,
+            spectral_norm=spectral_norm,
         )
         # Head 1: latent source ω_Z
         self.latent_source_net = make_mlp(

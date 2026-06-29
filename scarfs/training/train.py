@@ -541,7 +541,7 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
     # absorption_from_rates_fn: use B1b if available, else None
     abs_fn = extras.get("absorption_from_rates_fn", None)
 
-    return L.merged_composite(
+    _loss, _parts = L.merged_composite(
         model=model,
         y_std_scaled=y_std,
         q=q,
@@ -575,6 +575,11 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
         transport_weight=cfg.loss.transport_weight,
         noise_std=cfg.loss.noise_std,
         rollout_mode=cfg.loss.rollout_mode,
+        contraction_weight=cfg.loss.contraction_weight,
+        contraction_gain=cfg.loss.contraction_gain,
+        contraction_eps=cfg.loss.contraction_eps,
+        slow_manifold_weight=cfg.loss.slow_manifold_weight,
+        slow_manifold_gain=cfg.loss.slow_manifold_gain,
         idx_t=lagrangian_idx_t,
         idx_tp1=lagrangian_idx_tp1,
         dtau=lagrangian_dtau,
@@ -587,6 +592,21 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
         transport_targets=transport_targets_t,
         absorption_from_rates_fn=abs_fn,
     )
+
+    # -- pushforward rollout (species-space closed-loop tracking; opt-in) -----------------
+    if train and cfg.loss.pushforward_weight > 0.0 and extras.get("pushforward_seq_ystd") is not None:
+        sy = extras["pushforward_seq_ystd"]
+        if len(sy) > 0:
+            rng = extras["pf_rng"]
+            bsel = rng.choice(len(sy), min(1024, len(sy)), replace=False)
+            sy_t = torch.as_tensor(sy[bsel], dtype=torch.float32, device=device)
+            sq_t = torch.as_tensor(extras["pushforward_seq_q"][bsel], dtype=torch.float32, device=device)
+            sd_t = torch.as_tensor(extras["pushforward_seq_dtau"][bsel], dtype=torch.float32, device=device)
+            als = torch.as_tensor(extras["arcsinh_latent_scale"], dtype=torch.float32, device=device)
+            pf = L.pushforward_species_loss(model, sy_t, sq_t, sd_t, als)
+            _loss = _loss + cfg.loss.pushforward_weight * pf
+            _parts["pushforward"] = float(pf.detach())
+    return _loss, _parts
 
 
 # ---------------------------------------------------------------------------
@@ -932,7 +952,31 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
             keq_penalty_fn = _keq_penalty
 
     # store merged extras on bundle (split-local arrays keyed _train / _val)
+    # Pushforward rollout sequences (species-space closed-loop tracking; opt-in via pushforward_weight)
+    pf_seq_ystd = pf_seq_q = pf_seq_dtau = None
+    if cfg.loss.pushforward_weight > 0.0:
+        from .datamodule import case_step_sequences
+        try:
+            _seq_idx, _seq_dtau = case_step_sequences(
+                df_train, schema, K=cfg.loss.pushforward_steps, stride=4)
+            _MAX_SEQ = 30000
+            if len(_seq_idx) > _MAX_SEQ:
+                _pick = np.random.default_rng(cfg.data.seed).choice(len(_seq_idx), _MAX_SEQ, replace=False)
+                _seq_idx, _seq_dtau = _seq_idx[_pick], _seq_dtau[_pick]
+            _Xs = bundle.X_train[_seq_idx]                 # (n_seq, K+1, n_in + n_thermo)
+            pf_seq_ystd = _Xs[:, :, :n_in].astype(np.float32)
+            pf_seq_q = _Xs[:, :, n_in:].astype(np.float32)
+            pf_seq_dtau = _seq_dtau.astype(np.float32)
+            print(f"_train_merged: pushforward enabled — {len(_seq_idx)} K={cfg.loss.pushforward_steps} sequences",
+                  flush=True)
+        except KeyError:
+            warnings.warn("case_step_sequences failed (missing tau/z); pushforward disabled.")
+
     bundle._merged_extras = {
+        "pushforward_seq_ystd": pf_seq_ystd,
+        "pushforward_seq_q": pf_seq_q,
+        "pushforward_seq_dtau": pf_seq_dtau,
+        "pf_rng": np.random.default_rng(cfg.data.seed + 777),
         "comp_mean_active": comp_mean_active,
         "atom_nonconserving_projector": atom_nonconserving_projector,
         "transport_target_train": transport_target_train,

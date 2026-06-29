@@ -192,6 +192,30 @@ class LossConfig:
     qoi_recon_weight: float = 0.0
     #: Rollout mode: "manifold" (existing multi-step) | "lagrangian" (same-case τ continuity).
     rollout_mode: str = "manifold"
+    #: Contraction penalty on the round-trip projection P=E∘D (closed-loop a-posteriori stability).
+    #: Penalises relu(‖P(z+δ)-P(z)‖/‖δ‖ − contraction_gain)² so the deployed latent map stops
+    #: amplifying perturbations (measured gain ≈6.6 ⇒ exponential drift). 0.0 = disabled (default;
+    #: preserves all existing runs). ~1.0 to enable. See scripts/diag_projection_gain.py.
+    contraction_weight: float = 0.0
+    #: Target Lipschitz gain for the round-trip projection (≤1 ⇒ contractive/stable).
+    contraction_gain: float = 0.9
+    #: Latent-perturbation scale (in encoder-output units) for the contraction penalty probe.
+    contraction_eps: float = 0.1
+    #: Multi-step PUSHFORWARD rollout loss in decoded-species space (closed-loop TRACKING; pairs with
+    #: contraction, which only gives boundedness). Pushforward-trick: roll K steps feeding the model its
+    #: own output (no-grad to reach drifted states), 1-step grad from each, decode and match true Y.
+    #: Trains E/D/ω_Z jointly to track truth off-manifold. 0.0 = disabled. ~0.5 to enable. See
+    #: LATENT_TRANSPORT_ADAPTATION.md and scripts/aposteriori_rollout.py.
+    pushforward_weight: float = 0.0
+    #: Pushforward rollout horizon K (number of integrated steps per sequence).
+    pushforward_steps: int = 8
+    #: ADAPTATION #2 — slow-manifold (anisotropic) contraction. Contracts ONLY the directions
+    #: TRANSVERSE to the trajectory tangent (z_dot_true) — the fast/off-manifold modes — leaving the
+    #: slow along-trajectory direction free. Makes the manifold attracting (Layer-2 tracking) without
+    #: the isotropic contraction's over-damping of the slow dynamics. 0.0 = disabled. ~0.5 to enable.
+    slow_manifold_weight: float = 0.0
+    #: Target gain for the TRANSVERSE (fast) modes (<1 ⇒ they contract / are slaved to the manifold).
+    slow_manifold_gain: float = 0.5
 
 
 @dataclass
