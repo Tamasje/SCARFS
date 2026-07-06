@@ -860,6 +860,8 @@ def _torch_eval(
     ls_sizes = _infer_mlp_sizes_from_layers(weights_dict["latent_source_layers"], k)
     rate_sizes = _infer_mlp_sizes_from_layers(weights_dict["rate_layers"], n_energy_active)
     en_sizes = _infer_mlp_sizes_from_layers(weights_dict["energy_layers"], 1)
+    enc_sizes = (_infer_mlp_sizes_from_layers(weights_dict["encoder_mlp_layers"], n_dry)
+                 if weights_dict.get("encoder_mlp_layers") else ())
 
     model = MergedCoil(
         n_dry=n_dry,
@@ -872,6 +874,7 @@ def _torch_eval(
         energy_hidden=en_sizes,
         activation="silu",
         spectral_norm=False,
+        encoder_hidden=enc_sizes,
     )
 
     # Set energy calibration buffers
@@ -934,10 +937,9 @@ def _set_model_weights(model, weights_dict: dict[str, Any]) -> None:
     import torch
     import torch.nn as nn
 
-    # Encoder
-    model.encoder.weight.data = torch.as_tensor(
-        weights_dict["encoder_W"], dtype=torch.float32
-    )
+    # Encoder: linear branch (or the residual encoder's .lin); the MLP branch is loaded below.
+    _enc_lin = model.encoder.lin if hasattr(model.encoder, "lin") else model.encoder
+    _enc_lin.weight.data = torch.as_tensor(weights_dict["encoder_W"], dtype=torch.float32)
 
     def _load_seq(seq, layer_descs):
         linear_descs = [d for d in layer_descs if d["type"] == "linear"]
@@ -960,6 +962,8 @@ def _set_model_weights(model, weights_dict: dict[str, Any]) -> None:
     _load_seq(model.latent_source_net, weights_dict["latent_source_layers"])
     _load_seq(model.rate_net, weights_dict["rate_layers"])
     _load_seq(model.energy_net, weights_dict["energy_layers"])
+    if weights_dict.get("encoder_mlp_layers") and hasattr(model.encoder, "mlp"):
+        _load_seq(model.encoder.mlp, weights_dict["encoder_mlp_layers"])
 
 
 # ---------------------------------------------------------------------------
@@ -1143,6 +1147,8 @@ def _max_layer_width(weights_dict: dict[str, Any]) -> int:
     net_keys = ["decoder_layers", "latent_source_layers", "rate_layers", "energy_layers"]
     if weights_dict.get("n_transport", 0) > 0 and "transport_layers" in weights_dict:
         net_keys.append("transport_layers")
+    if weights_dict.get("encoder_mlp_layers"):
+        net_keys.append("encoder_mlp_layers")
     for net_key in net_keys:
         for d in weights_dict[net_key]:
             if d["type"] == "linear":
@@ -1247,6 +1253,10 @@ def _render_header(
         "/* --- Encoder weight (k × n_dry, row-major: z = W_enc @ y_std) --- */",
         _c_double_array("MC_ENC_W", weights_dict["encoder_W"].ravel()),
         "",
+        *(["#define MC_HAS_ENCMLP 1",
+           "/* --- Residual encoder MLP: z += MLP(y_std); input y_std (n_dry), output k --- */",
+           _render_weights_for_net("MC_ENCMLP", weights_dict["encoder_mlp_layers"]), ""]
+          if weights_dict.get("encoder_mlp_layers") else []),
         "/* --- Decoder MLP (SiLU hidden, linear out; input: [z | q], output: y_std) --- */",
         _render_weights_for_net("MC_DEC", weights_dict["decoder_layers"]),
         "",
@@ -1660,6 +1670,16 @@ static void mc_encode(const double *y_std, double *z)
         for (j = 0; j < MC_N_DRY; ++j) s += MC_ENC_W[i * MC_N_DRY + j] * y_std[j];
         z[i] = s;
     }}
+#ifdef MC_HAS_ENCMLP
+    {{  /* residual encoder: z += MLP(y_std) (nonlinear curvature correction) */
+        double _e[MC_K]; int _i;
+        mc_net_eval(MC_ENCMLP_N_LAYERS, MC_ENCMLP_LAYER_TYPES, MC_ENCMLP_N_LINEAR,
+                    MC_ENCMLP_IN, MC_ENCMLP_OUT, MC_ENCMLP_W, MC_ENCMLP_B,
+                    MC_ENCMLP_N_LN, MC_ENCMLP_LN_GAMMA, MC_ENCMLP_LN_BETA, MC_ENCMLP_LN_EPS_ARR,
+                    y_std, _e);
+        for (_i = 0; _i < MC_K; ++_i) z[_i] += _e[_i];
+    }}
+#endif
 }}
 
 /* Clamp latent to training envelope; returns 1 if any dim was clamped, else 0 */
@@ -2072,6 +2092,16 @@ static void mc_encode(const double *y_std, double *z)
         for (j = 0; j < MC_N_DRY; ++j) s += MC_ENC_W[i * MC_N_DRY + j] * y_std[j];
         z[i] = s;
     }}
+#ifdef MC_HAS_ENCMLP
+    {{  /* residual encoder: z += MLP(y_std) (nonlinear curvature correction) */
+        double _e[MC_K]; int _i;
+        mc_net_eval(MC_ENCMLP_N_LAYERS, MC_ENCMLP_LAYER_TYPES, MC_ENCMLP_N_LINEAR,
+                    MC_ENCMLP_IN, MC_ENCMLP_OUT, MC_ENCMLP_W, MC_ENCMLP_B,
+                    MC_ENCMLP_N_LN, MC_ENCMLP_LN_GAMMA, MC_ENCMLP_LN_BETA, MC_ENCMLP_LN_EPS_ARR,
+                    y_std, _e);
+        for (_i = 0; _i < MC_K; ++_i) z[_i] += _e[_i];
+    }}
+#endif
 }}
 
 static int mc_clamp_latent(const double *z_in, double *z_out)
