@@ -82,6 +82,9 @@ class ModelConfig:
     latent_dim: int = 6                                 # neuralcoil / merged
     decoder_hidden: tuple[int, ...] = (128, 256)        # neuralcoil / merged
     rate_hidden: tuple[int, ...] = (128, 128)           # neuralcoil / merged
+    #: Encoder hidden widths. () = linear encoder (~PCA, default). Non-empty = MLP encoder — lets a
+    #: low-k latent parametrise the curved slow manifold (the low-k lever; merged model only).
+    encoder_hidden: tuple[int, ...] = ()
     activation: str = "silu"
     # -- merged-model additions ----------------------------------------------------------
     #: Hidden widths for the latent-source head (ω_Z(Z,q) -> k).
@@ -127,6 +130,13 @@ class OptimConfig:
     #: the latent term dominates — that criterion measurably discards the head's own
     #: optimum (overnight diagnosis E8 vs E9: head R² 0.636 @ 14 ep → 0.096 @ 60 ep).
     head_finetune_epochs: int = 0
+    #: Warm-start the merged model from a prior bundle's model.pt before training (Stage-B / fine-tune).
+    #: "" = fresh init (default). Used for the staged "freeze-encoder + pushforward" closed-loop fix.
+    init_from: str = ""
+    #: Freeze the encoder during training (Stage B): the encoder sets the manifold geometry that fixes
+    #: a-priori accuracy, so freezing it lets the closed-loop (pushforward/contraction) losses reshape
+    #: ONLY the decoder + ω_Z dynamics without trading away accuracy. False = all trainable (default).
+    freeze_encoder: bool = False
 
 
 @dataclass
@@ -239,7 +249,7 @@ class TrainConfig:
         """
         model_d = dict(d.get("model", {}))
         _tuple_fields_model = (
-            "hidden", "decoder_hidden", "rate_hidden",
+            "hidden", "decoder_hidden", "rate_hidden", "encoder_hidden",
             "latent_source_hidden", "energy_hidden", "transport_hidden",
         )
         for f in _tuple_fields_model:

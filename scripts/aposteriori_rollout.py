@@ -75,11 +75,12 @@ class Surrogate:
 
     def encode(self, Y):  # (n_dry,) -> (1,k) clipped to envelope
         ystd = (np.atleast_2d(Y) - self.cm) / self.cs
-        return np.clip(_numpy_encoder(ystd, self.W["encoder_W"]), self.env_lo, self.env_hi)
+        return np.clip(_numpy_encoder(ystd, self.W["encoder_W"], self.W.get("encoder_mlp_layers")),
+                       self.env_lo, self.env_hi)
 
     def project(self, z, qn):
         ydec = _numpy_forward(z, qn, self.W["decoder_layers"])
-        return _numpy_encoder(ydec, self.W["encoder_W"])
+        return _numpy_encoder(ydec, self.W["encoder_W"], self.W.get("encoder_mlp_layers"))
 
     def decode_mass(self, z, qn):  # -> (1,n_dry) physical mass fractions, H2O-closed
         ydec = _numpy_forward(z, qn, self.W["decoder_layers"])
@@ -181,8 +182,8 @@ def main() -> None:
     print(f"cases: {len(cases)}   substep sweep: {substep_vals}")
     print(f"τ-scheme control (integrate STORED dY/dτ): major-traj relRMSE "
           f"median={np.median(ctrl_rl):.4f}  (≈0 ⇒ integration scheme + units correct)\n")
-    print(f"  {'substeps':>8} {'rolled':>7} {'blewup':>7} {'traj_relRMSE(med)':>18} {'outlet|ΔY|(med)':>16} "
-          f"{'∫S_E relerr(med)':>16} {'env-clamp(med/max)':>20}")
+    print(f"  {'substeps':>8} {'rolled':>7} {'blewup':>7} {'traj_relRMSE(med)':>18} {'traj_ABS_RMSE(med/p95)':>24} "
+          f"{'outlet|ΔY|(med)':>16} {'∫S_E relerr(med)':>16} {'env-clamp(med/max)':>20}")
     for ns in substep_vals:
         rows = []
         for (c, T, P, tau, Y_true, abs_true) in cases:
@@ -192,11 +193,14 @@ def main() -> None:
             I_p = float(_TRAP(abs_pred, tau)); I_t = float(_TRAP(abs_true, tau))
             rows.append({"blewup": False,
                          "maj": float(np.mean([_relrmse(Y_pred[:, j], Y_true[:, j]) for j in maj_idx])),
+                         # ABSOLUTE trajectory RMSE (mass-frac units) — immune to near-zero-species relRMSE artifact
+                         "abs": float(np.mean([np.sqrt(np.mean((Y_pred[:, j] - Y_true[:, j]) ** 2)) for j in maj_idx])),
                          "term": float(np.mean([abs(Y_pred[-1, j] - Y_true[-1, j]) for j in maj_idx])),
                          "eint": abs(I_p - I_t) / max(abs(I_t), 1.0), "env": max_env})
         ok = [r for r in rows if not r["blewup"]]; nb = len(rows) - len(ok)
         g = lambda k: np.array([r[k] for r in ok])  # noqa: E731
-        print(f"  {ns:>8} {len(ok):>7} {nb:>7} {np.median(g('maj')):>18.4f} {np.median(g('term')):>16.2e} "
+        print(f"  {ns:>8} {len(ok):>7} {nb:>7} {np.median(g('maj')):>18.4f} "
+              f"{np.median(g('abs')):>11.2e}/{np.percentile(g('abs'),95):<11.2e} {np.median(g('term')):>16.2e} "
               f"{np.median(g('eint')):>16.4f} {np.median(g('env')):>9.2e}/{g('env').max():<9.2e}")
     print("\n  Reading it: traj_relRMSE -> O(0.1) = stable & accurate; >>1 / env-clamp >>0 = closed-loop drift.")
     print("  If finer substeps collapse the error, the storage-grid explicit-Euler was the artifact, not the model.")

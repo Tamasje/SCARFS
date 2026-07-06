@@ -61,7 +61,8 @@ def test_relrmse(bundle: str, dft, sch) -> dict:
                    decoder_hidden=tuple(cmod["decoder_hidden"]), rate_hidden=tuple(cmod["rate_hidden"]),
                    latent_source_hidden=tuple(cmod["latent_source_hidden"]), energy_hidden=tuple(cmod["energy_hidden"]),
                    n_transport=int(cmod.get("transport_outputs", 0) or 0),
-                   transport_hidden=tuple(cmod.get("transport_hidden", (64, 64))))
+                   transport_hidden=tuple(cmod.get("transport_hidden", (64, 64))),
+                   encoder_hidden=tuple(cmod.get("encoder_hidden", ()) or ()))
     m.load_state_dict(torch.load(b / "model.pt", map_location="cpu", weights_only=True)); m.eval()
     with torch.no_grad():
         out = m.forward(torch.tensor(ystd, dtype=torch.float32), torch.tensor(q, dtype=torch.float32))

@@ -633,9 +633,19 @@ def merged_composite(
     rates_pred = model.rates_from_latent(z_used, q)  # (batch, n_active)
     absorption_head = model.absorption(z_used, q)  # (batch, 1) strictly positive
 
-    # ground-truth latent source from the LIVE (detached) encoder: ż = E·(Ẏ_dry ⊘ σ_dry)
-    encoder_weight_full = model.encoder.weight.detach()            # (k, n_dry)
-    z_dot_true = (dydt_dry_phys / sigma_comp_all.unsqueeze(0)) @ encoder_weight_full.t()
+    # ground-truth latent source ż = d/dt E(Y_std) = J_E·(Ẏ_dry ⊘ σ_dry). For a LINEAR encoder
+    # J_E = W (constant) → the matmul below. For a NONLINEAR (MLP) encoder J_E is state-dependent →
+    # use a forward-mode JVP of the encoder at Y_std in the direction (Ẏ ⊘ σ). encoder_weight_full
+    # stays None in the nonlinear case, which auto-disables the linear-weight split-head consistency.
+    _ydot_std = dydt_dry_phys / sigma_comp_all.unsqueeze(0)
+    if getattr(model, "encoder_is_linear", True):
+        encoder_weight_full = model.encoder.weight.detach()        # (k, n_dry)
+        z_dot_true = _ydot_std @ encoder_weight_full.t()
+    else:
+        import torch.func as _tfunc
+        encoder_weight_full = None
+        _, z_dot_true = _tfunc.jvp(lambda _y: model.encode(_y), (y_std_scaled,), (_ydot_std,))
+        z_dot_true = z_dot_true.detach()
 
     # single inversion point: physical rates for the physics-facing terms (energy tie,
     # consistency, atom balance); identity when no inverse fn is supplied (tests/stubs).
@@ -699,7 +709,8 @@ def merged_composite(
             parts["energy_direct"] = float(etgt.detach())
 
     # -- 6. Split-head consistency -------------------------------------------------------
-    if latent_src is not None and rates_pred is not None and consistency_weight > 0.0:
+    if (latent_src is not None and rates_pred is not None and consistency_weight > 0.0
+            and encoder_weight_full is not None):  # linear-encoder-weight term; skipped for MLP encoder
         cpen = split_head_consistency(
             latent_src, rates_pred_phys, rho, dydt_dry_phys, z_dot_true,
             encoder_weight_full, active_col_idx, sigma_active,

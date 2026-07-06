@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 
 from scarfs.benchmark.loader import infer_schema, load_database
-from scarfs.coupling.codegen import _numpy_forward
+from scarfs.coupling.codegen import _numpy_forward, _numpy_encoder
 from scarfs.models.thermo import SpeciesThermo
 from scarfs.schema import MAJOR_SPECIES
 from scarfs.training.datamodule import tripartite_case_split
@@ -83,7 +83,8 @@ def main() -> None:
         blew = False
         for i in range(N):
             yfull = Yf[i].copy(); yfull[ea_idx] = Yact                  # 61 transported, rest prescribed-true
-            z = (np.atleast_2d((yfull - sg.cm) / sg.cs)) @ sg.W["encoder_W"].T  # E(Y), no projection
+            z = _numpy_encoder(np.atleast_2d((yfull - sg.cm) / sg.cs), sg.W["encoder_W"],
+                               sg.W.get("encoder_mlp_layers"))          # E(Y), no projection (residual-aware)
             rm = _rates_mass(sg, z, qn[i:i + 1])[0]                     # (n_active,) mass rate
             Ypred_act[i] = Yact
             absp[i] = float(np.sum(rm * ta.h_mass(np.atleast_1d(T[i]))))
