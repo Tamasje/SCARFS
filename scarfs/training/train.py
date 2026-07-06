@@ -142,6 +142,7 @@ def _build_merged_model(cfg: TrainConfig, spec: FeatureSpec):
         spectral_norm=cfg.model.spectral_norm,
         n_transport=cfg.model.transport_outputs,
         transport_hidden=tuple(cfg.model.transport_hidden),
+        encoder_hidden=tuple(cfg.model.encoder_hidden),
     )
 
 
@@ -252,11 +253,16 @@ def pca_init_encoder(model, X_comp_train: np.ndarray) -> np.ndarray:
     Returns the ``(k, n_dry)`` component matrix (same shape as encoder weight).
     """
     import torch
+    # Residual encoder (z = W_lin·y + MLP(y)): PCA-init the LINEAR branch; the MLP stays zero at init,
+    # so encode == the PCA encoder to start (fair warm-start for the nonlinear low-k experiment).
+    enc_lin = model.encoder if getattr(model, "encoder_is_linear", True) else getattr(model.encoder, "lin", None)
+    if enc_lin is None:
+        return None  # plain MLP encoder with no linear branch: nothing to PCA-init
     _, _, Vt = np.linalg.svd(X_comp_train - X_comp_train.mean(axis=0), full_matrices=False)
-    k = model.encoder.weight.shape[0]
+    k = enc_lin.weight.shape[0]
     components = Vt[:k]  # (k, n_dry)
     with torch.no_grad():
-        model.encoder.weight.copy_(torch.as_tensor(components, dtype=torch.float32))
+        enc_lin.weight.copy_(torch.as_tensor(components, dtype=torch.float32))
     return components
 
 
@@ -292,16 +298,33 @@ def freeze_latent_arcsinh_scale(
         ``(n_dry,)`` per-species composition-scaler scale σ (with ``dydt_dry_train``).
     """
     import torch
-    with torch.no_grad():
-        enc_w = model.encoder.weight.detach().cpu().numpy()  # (k, n_dry)
+    if getattr(model, "encoder_is_linear", True):
+        with torch.no_grad():
+            enc_w = model.encoder.weight.detach().cpu().numpy()  # (k, n_dry)
+        if dydt_dry_train is not None and sigma_comp is not None:
+            z_dot = (np.asarray(dydt_dry_train, dtype=float) / np.asarray(sigma_comp, dtype=float)) @ enc_w.T
+            return np.maximum(np.median(np.abs(z_dot), axis=0), 1e-12)
+        warnings.warn(
+            "freeze_latent_arcsinh_scale: no dydt/sigma supplied — falling back to the latent-STATE "
+            "scale, which mis-scales the latent-source target by orders of magnitude (see docstring)."
+        )
+        z = np.asarray(X_comp_train, dtype=float) @ enc_w.T   # (n_train, k)
+        return np.maximum(np.median(np.abs(z), axis=0), 1e-12)
+    # Nonlinear (MLP) encoder: ż = J_E(Y)·(Ẏ⊘σ) via forward-mode JVP (subsample for the median scale).
+    import torch.func as _tf
+    dev = next(model.parameters()).device
+    Y = np.asarray(X_comp_train, dtype=np.float32)
+    n = len(Y)
+    idx = np.arange(n) if n <= 20000 else np.random.default_rng(0).choice(n, 20000, replace=False)
+    Yt = torch.as_tensor(Y[idx], device=dev)
     if dydt_dry_train is not None and sigma_comp is not None:
-        z_dot = (np.asarray(dydt_dry_train, dtype=float) / np.asarray(sigma_comp, dtype=float)) @ enc_w.T
-        return np.maximum(np.median(np.abs(z_dot), axis=0), 1e-12)
-    warnings.warn(
-        "freeze_latent_arcsinh_scale: no dydt/sigma supplied — falling back to the latent-STATE "
-        "scale, which mis-scales the latent-source target by orders of magnitude (see docstring)."
-    )
-    z = X_comp_train @ enc_w.T                            # (n_train, k)
+        Vt = torch.as_tensor(np.asarray(dydt_dry_train, np.float32)[idx] / np.asarray(sigma_comp, np.float32), device=dev)
+        with torch.no_grad():
+            _, zdot = _tf.jvp(lambda yy: model.encode(yy), (Yt,), (Vt,))
+        return np.maximum(np.median(np.abs(zdot.detach().cpu().numpy()), axis=0), 1e-12)
+    warnings.warn("freeze_latent_arcsinh_scale: no dydt/sigma (nonlinear encoder) — latent-STATE scale fallback.")
+    with torch.no_grad():
+        z = model.encode(Yt).detach().cpu().numpy()
     return np.maximum(np.median(np.abs(z), axis=0), 1e-12)
 
 
@@ -626,7 +649,7 @@ def train(cfg: TrainConfig) -> dict:
     bundle = prepare_data(cfg.data, df, schema)
     device = _select_device()
     model = build_model(cfg, bundle.spec).to(device)
-    optimiser = torch.optim.AdamW(model.parameters(), lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
+    optimiser = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
 
     history: list[dict] = []
     best_val, best_state, since = float("inf"), None, 0
@@ -752,6 +775,17 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
     # PCA-init encoder on the standardized composition (latent arcsinh scales are frozen
     # AFTER the dYdt block below — they must come from the latent-SOURCE distribution)
     pca_init_encoder(model, X_comp_train)
+    # Stage-B warm-start: load a prior bundle's weights (overrides the fresh/PCA init), optionally
+    # freeze the encoder so the closed-loop losses reshape only the decoder + ω_Z dynamics.
+    if getattr(cfg.optim, "init_from", ""):
+        _sd = torch.load(str(Path(cfg.optim.init_from) / "model.pt"), map_location=device, weights_only=True)
+        _missing, _unexpected = model.load_state_dict(_sd, strict=False)
+        print(f"_train_merged: warm-started from {cfg.optim.init_from} "
+              f"(missing={len(_missing)}, unexpected={len(_unexpected)})", flush=True)
+    if getattr(cfg.optim, "freeze_encoder", False):
+        for _p in model.encoder.parameters():
+            _p.requires_grad_(False)
+        print("_train_merged: encoder FROZEN (Stage-B closed-loop fine-tune)", flush=True)
     arcsinh_rate_scale = rate_scaler.scale_
 
     # thermo restricted to the energy-active set (selection guarantees thermo coverage)
@@ -1005,7 +1039,7 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         "energy_arcsinh_scale": energy_scale,
     }
 
-    optimiser = torch.optim.AdamW(model.parameters(), lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
+    optimiser = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
     scheduler = _build_lr_scheduler(optimiser, cfg)
     use_energy_ckpt = (getattr(cfg.optim, "checkpoint_metric", "total") == "energy_relrmse"
                        and absorption_val is not None and len(bundle.X_val))

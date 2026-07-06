@@ -400,7 +400,9 @@ def _load_model_weights(
     from scarfs.models.neuralcoil import MergedCoil
 
     # Infer architecture from state dict shapes
-    k = state_dict["encoder.weight"].shape[0]  # latent dim
+    _resid_enc = "encoder.lin.weight" in state_dict   # residual (PCA + MLP) encoder
+    k = (state_dict["encoder.lin.weight"] if _resid_enc else state_dict["encoder.weight"]).shape[0]
+    encoder_hidden = tuple(spec.get("config_echo", {}).get("model", {}).get("encoder_hidden", ()) or ())
     n_thermo = 4
 
     # Determine hidden dims by examining sequential layers in each sub-network
@@ -427,6 +429,7 @@ def _load_model_weights(
         spectral_norm=False,
         n_transport=n_transport,
         transport_hidden=tp_sizes["hidden"] or (64, 64),
+        encoder_hidden=encoder_hidden,
     )
 
     # Load state dict (strict=False tolerates extra keys from parametrizations)
@@ -443,7 +446,8 @@ def _load_model_weights(
         "n_transport": n_transport,
         "energy_scale": float(model.energy_scale.detach().cpu().numpy()),
         "energy_floor": float(model.energy_floor.detach().cpu().numpy()),
-        "encoder_W": model.encoder.weight.detach().cpu().numpy(),  # (k, n_dry)
+        "encoder_W": (model.encoder.lin if _resid_enc else model.encoder).weight.detach().cpu().numpy(),  # (k, n_dry)
+        "encoder_mlp_layers": _extract_mlp_layers(model.encoder.mlp) if _resid_enc else None,  # residual correction
         "decoder_layers": _extract_mlp_layers(model.decoder),
         "latent_source_layers": _extract_mlp_layers(model.latent_source_net),
         "rate_layers": _extract_mlp_layers(model.rate_net),
@@ -687,9 +691,12 @@ def _numpy_softplus(x: np.ndarray) -> np.ndarray:
     return np.log1p(np.exp(-np.abs(x))) + np.maximum(x, 0.0)
 
 
-def _numpy_encoder(y_std: np.ndarray, encoder_W: np.ndarray) -> np.ndarray:
-    """Linear encoder: z = y_std @ W.T (bias=False)."""
-    return y_std @ encoder_W.T
+def _numpy_encoder(y_std: np.ndarray, encoder_W: np.ndarray, mlp_layers=None) -> np.ndarray:
+    """Encoder z = y_std @ W.T (+ MLP(y_std) for the residual encoder; bias-free linear branch)."""
+    z = y_std @ encoder_W.T
+    if mlp_layers:  # residual nonlinear correction: MLP takes y only (empty thermo block)
+        z = z + _numpy_forward(y_std, np.zeros((y_std.shape[0], 0), dtype=y_std.dtype), mlp_layers)
+    return z
 
 
 def _numpy_mirror_eval(
@@ -737,7 +744,7 @@ def _numpy_mirror_eval(
         q_nn = (q_nn - thermo_sc.mean_) / thermo_sc.scale_
 
     # Encode
-    z_raw = _numpy_encoder(y_std, weights_dict["encoder_W"])  # (B, k)
+    z_raw = _numpy_encoder(y_std, weights_dict["encoder_W"], weights_dict.get("encoder_mlp_layers"))  # (B, k)
 
     # Clamp latent to envelope
     lat_min = np.asarray(stats["latent_env_min"], dtype=float)
@@ -746,7 +753,7 @@ def _numpy_mirror_eval(
 
     # Manifold projection: decode -> re-encode
     y_dec_std = _numpy_forward(z, q_nn, weights_dict["decoder_layers"])  # (B, n_dry)
-    z_proj = _numpy_encoder(y_dec_std, weights_dict["encoder_W"])        # (B, k)
+    z_proj = _numpy_encoder(y_dec_std, weights_dict["encoder_W"], weights_dict.get("encoder_mlp_layers"))        # (B, k)
 
     # Latent source ω_Z: head emits arcsinh(ω_Z / s_Z); physical = sinh(·)·s_Z.
     # The pre-sinh clip at ±20 is a pure overflow guard shared by torch/numpy/C.
@@ -2237,7 +2244,7 @@ def _render_inlet_bc(
     y_std = (Y_dry - comp_mean) / comp_scale
 
     # Encode
-    z_in = _numpy_encoder(y_std[np.newaxis, :], weights_dict["encoder_W"])[0]
+    z_in = _numpy_encoder(y_std[np.newaxis, :], weights_dict["encoder_W"], weights_dict.get("encoder_mlp_layers"))[0]
 
     # Also compute with T/P clamped (same as what Fluent will see)
     T_nn = float(np.clip(inlet.T, stats["T_train_min"], stats["T_train_max"]))

@@ -111,6 +111,30 @@ class NeuralCoil(nn.Module):
         return {"z": z, "z_proj": z_proj, "y_recon": y_recon, "rates": rates}
 
 
+class ResidualEncoder(nn.Module):
+    """Encoder z = W_lin·y + MLP(y), with the MLP's final layer ZERO-initialised.
+
+    At init the MLP contributes nothing, so ``encode`` == the linear (PCA-init) encoder — the proven
+    a-priori baseline. Training then adds only the nonlinear *curvature correction* needed to
+    parametrise the curved low-k slow manifold. This guarantees the nonlinear encoder can never
+    START below the linear one (the failure mode of a cold-start MLP encoder, 2026-07-05).
+    """
+
+    def __init__(self, n_dry: int, k: int, hidden: tuple[int, ...], activation: str, spectral_norm: bool):
+        super().__init__()
+        self.lin = nn.Linear(n_dry, k, bias=False)
+        self.mlp = make_mlp([n_dry, *hidden, k], activation=activation, layernorm=False,
+                            final_activation=None, spectral_norm=spectral_norm)
+        _lasts = [m for m in self.mlp.modules() if isinstance(m, nn.Linear)]
+        if _lasts:  # zero the MLP output layer -> encode == lin at init
+            nn.init.zeros_(_lasts[-1].weight)
+            if _lasts[-1].bias is not None:
+                nn.init.zeros_(_lasts[-1].bias)
+
+    def forward(self, y: torch.Tensor) -> torch.Tensor:
+        return self.lin(y) + self.mlp(y)
+
+
 class MergedCoil(nn.Module):
     """Split-head merged latent-space surrogate (plan §3 / §4 E-a – E-e).
 
@@ -163,6 +187,7 @@ class MergedCoil(nn.Module):
         spectral_norm: bool = False,
         n_transport: int = 0,
         transport_hidden: tuple[int, ...] = (64, 64),
+        encoder_hidden: tuple[int, ...] = (),
     ) -> None:
         super().__init__()
         self.n_dry = n_dry
@@ -171,7 +196,15 @@ class MergedCoil(nn.Module):
         self.n_transport = int(n_transport)
 
         k = latent_dim
-        self.encoder = nn.Linear(n_dry, k, bias=False)
+        # Encoder: linear (~PCA, default — constant Jacobian) OR a small MLP when encoder_hidden is
+        # set. A NONLINEAR encoder lets a low-k latent curve onto the (measured ~4-6D) slow manifold
+        # and recover energy info that a linear projection needs k=32 for — the low-k lever (2026-06-29).
+        self.encoder_hidden = tuple(encoder_hidden)
+        self.encoder_is_linear = not self.encoder_hidden
+        if self.encoder_is_linear:
+            self.encoder = nn.Linear(n_dry, k, bias=False)
+        else:
+            self.encoder = ResidualEncoder(n_dry, k, self.encoder_hidden, activation, spectral_norm)
         # Decoder: standardised-space output (no sigmoid — caller handles composition contract).
         # spectral_norm here bounds the decoder's Lipschitz constant — the map D in the latent
         # projection z<-E·D(z); contracting it is the targeted fix for the closed-loop latent-
