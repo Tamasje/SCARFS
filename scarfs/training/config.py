@@ -219,6 +219,13 @@ class LossConfig:
     pushforward_weight: float = 0.0
     #: Pushforward rollout horizon K (number of integrated steps per sequence).
     pushforward_steps: int = 8
+    #: ENERGY-aware pushforward: within the closed-loop rollout, ALSO match the rate-derived
+    #: absorption S_E = Σ hᵢ·ω̇ᵢ at each drifted-then-projected state to the true S_E along the
+    #: trajectory (arcsinh-space MSE, relative to pushforward_weight). The plain pushforward trains
+    #: only COMPOSITION tracking; the deployed energy quantity is optimised only indirectly, so the
+    #: rollout ∫S_E lags (~25%) even when composition tracks to ~2%. This term targets it directly.
+    #: 0.0 = disabled (default; plain species-only pushforward). ~0.5–1.0 to enable.
+    pushforward_energy_weight: float = 0.0
     #: ADAPTATION #2 — slow-manifold (anisotropic) contraction. Contracts ONLY the directions
     #: TRANSVERSE to the trajectory tangent (z_dot_true) — the fast/off-manifold modes — leaving the
     #: slow along-trajectory direction free. Makes the manifold attracting (Layer-2 tracking) without
@@ -226,6 +233,21 @@ class LossConfig:
     slow_manifold_weight: float = 0.0
     #: Target gain for the TRANSVERSE (fast) modes (<1 ⇒ they contract / are slaved to the manifold).
     slow_manifold_gain: float = 0.5
+    #: STABLE LATENT ODE (2026-07-08). "reproject" (default) = legacy z←P(z)+Δτ·ω_Z(P(z)) with the
+    #: E∘D re-projection. "direct" = z←z+Δτ·model.latent_field(z,q), NO re-projection — the deployed
+    #: loop advances the raw latent by the stable field f=sinh(ω_Z)·s_Z−β·z. This decouples decoder
+    #: fidelity from transport stability (the E∘D contraction was what flattened the decoder and
+    #: capped composition reconstruction ⇒ ∫S_E). Pair with dynamics_contraction_weight, recon-priority
+    #: (recon_weight↑, qoi_recon↑), and decoder spectral_norm OFF (faithful decoder).
+    transport_mode: str = "reproject"
+    #: Weight on the dynamics-map contraction penalty relu(gain[z↦z+Δτ·f]−dynamics_contraction_gain)²
+    #: (direct mode only). Tightens the field's contraction beyond its structural −β·z floor. ~1.0.
+    dynamics_contraction_weight: float = 0.0
+    #: Target gain for the direct-transport map z↦z+Δτ·f(z,q) (≤1 ⇒ non-expansive / stable).
+    dynamics_contraction_gain: float = 1.0
+    #: Representative (coarse storage-grid) Δτ [s] for the dynamics-contraction probe; deployed CFD Δτ
+    #: is finer ⇒ strictly more contractive, so this is conservative.
+    dynamics_dtau: float = 1.0e-3
 
 
 @dataclass

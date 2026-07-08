@@ -244,6 +244,16 @@ class MergedCoil(nn.Module):
         self.register_buffer("energy_scale", torch.tensor(1.0))
         self.register_buffer("energy_floor", torch.tensor(0.0))
 
+        # Stable latent-ODE transport (2026-07-08): the deployed loop can advance the latent DIRECTLY
+        # (dz/dτ = latent_field(z,q); NO E∘D re-projection) instead of z ← P(z)+Δτ·ω_Z(P(z)). This
+        # decouples decoder fidelity from transport stability — the E∘D re-projection was what forced
+        # the decoder flat (contraction penalty on P) and capped composition reconstruction (∴ ∫S_E).
+        # Stability instead comes from the FIELD: f = sinh(ω_Z)·s_Z − β·z, where the structural damping
+        # −β·z (β = softplus(field_damping_raw) ≥ 0) shifts every eigenvalue of ∂f/∂z down by β — a
+        # contraction floor — while the arcsinh ω_Z term carries the ~1e8 latent-velocity dynamic range.
+        self.register_buffer("latent_arcsinh_scale", torch.ones(k))
+        self.field_damping_raw = nn.Parameter(torch.tensor(-2.0))  # softplus(-2)≈0.13 initial damping
+
         # Head 4 (optional): transport properties (μ, k, …) — strictly positive via softplus.
         # n_transport == 0 disables it entirely (state-dict unchanged for the legacy contract).
         if self.n_transport > 0:
@@ -282,6 +292,25 @@ class MergedCoil(nn.Module):
     def latent_source(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
         """Scaled latent-source ω_Z (shape ``(B, k)``) for CFD transport."""
         return self.latent_source_net(torch.cat([z, q], dim=-1))
+
+    def latent_field(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+        """Stable latent vector field f(z,q) = dz/dτ for DIRECT transport (no E∘D re-projection).
+
+        f = sinh(clamp(ω_Z))·s_Z − β·z:
+        - the arcsinh term (physical ω_Z = sinh(head)·s_Z) carries the wide latent-velocity range;
+        - the structural damping −β·z (β = softplus(field_damping_raw) ≥ 0) contributes −β·I to
+          ∂f/∂z everywhere, a construction-guaranteed contraction floor that keeps the deployed map
+          z ← z + Δτ·f non-expansive without flattening the (faithful) decoder.
+        Physical latent units [1/s]; the ±20 pre-sinh clamp is a pure overflow guard.
+        """
+        w = self.latent_source_net(torch.cat([z, q], dim=-1)).clamp(-20.0, 20.0)
+        beta = torch.nn.functional.softplus(self.field_damping_raw)
+        return torch.sinh(w) * self.latent_arcsinh_scale.unsqueeze(0) - beta * z
+
+    def set_latent_field_scale(self, s_z) -> None:
+        """Set the per-dim arcsinh latent-source scale buffer used by :meth:`latent_field`."""
+        s = torch.as_tensor(s_z, dtype=self.latent_arcsinh_scale.dtype).reshape(-1)
+        self.latent_arcsinh_scale.copy_(s)
 
     def rates_from_latent(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
         """Scaled physical production rates for energy-active species (``(B, n_energy_active)``)."""
