@@ -38,3 +38,4 @@ sanity_figures/
 
 # OS cruft
 .DS_Store
+configs/_*.json

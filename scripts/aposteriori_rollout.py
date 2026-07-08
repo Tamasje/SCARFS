@@ -64,6 +64,13 @@ class Surrogate:
         self.env_hi = np.asarray(st["latent_env_max"], float)
         self.s_z = np.asarray(spec["arcsinh_latent_scale"], float)
         self.input = spec["input"]
+        # stable latent ODE (direct transport): advance raw z by the field f = ω_Z − β·z, NO
+        # re-projection; readout heads at raw (clamped) z. reproject = legacy E∘D path.
+        self.direct = spec.get("transport_mode") == "direct"
+        self.beta = float(spec.get("field_damping", 0.0))
+
+    def field(self, z, qn):  # stable-ODE physical latent field f = sinh(ω_Z)·s_Z − β·z at raw z
+        return self.omega_z(z, qn) - self.beta * z
 
     def q(self, T, P):
         Tn = np.clip(np.atleast_1d(T), self.Tmin, self.Tmax)
@@ -118,7 +125,7 @@ def rollout_case(sg: Surrogate, T, P, tau, Y_true, abs_true, substeps: int = 1):
     max_env = 0.0
     for i in range(n):
         qn = sg.q(T[i], P[i])
-        zp = sg.project(z, qn)
+        zp = z if sg.direct else sg.project(z, qn)   # direct: heads read raw (clamped) z, no E∘D
         Y_pred[i] = sg.decode_mass(zp, qn)[0]
         abs_pred[i] = sg.absorption_rate(zp, qn, T[i])
         if i < n - 1:
@@ -126,8 +133,11 @@ def rollout_case(sg: Surrogate, T, P, tau, Y_true, abs_true, substeps: int = 1):
             for ss in range(substeps):
                 frac = (ss + 0.5) / substeps  # midpoint-interpolated thermo within the interval
                 qm = sg.q(T[i] + (T[i + 1] - T[i]) * frac, P[i] + (P[i + 1] - P[i]) * frac)
-                zps = sg.project(z, qm)
-                z = zps + sg.omega_z(zps, qm) * h
+                if sg.direct:
+                    z = z + sg.field(z, qm) * h            # stable ODE: z += Δτ·(ω_Z − β·z), no reproject
+                else:
+                    zps = sg.project(z, qm)
+                    z = zps + sg.omega_z(zps, qm) * h
                 max_env = max(max_env, float(np.max(np.abs(np.clip(z, sg.env_lo, sg.env_hi) - z) / span)))
                 z = np.clip(z, sg.env_lo, sg.env_hi)  # the UDF's latent envelope guard, each step
     return Y_pred, abs_pred, max_env

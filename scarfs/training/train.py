@@ -603,6 +603,10 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
         contraction_eps=cfg.loss.contraction_eps,
         slow_manifold_weight=cfg.loss.slow_manifold_weight,
         slow_manifold_gain=cfg.loss.slow_manifold_gain,
+        transport_mode=cfg.loss.transport_mode,
+        dynamics_contraction_weight=cfg.loss.dynamics_contraction_weight,
+        dynamics_contraction_gain=cfg.loss.dynamics_contraction_gain,
+        dynamics_dtau=cfg.loss.dynamics_dtau,
         idx_t=lagrangian_idx_t,
         idx_tp1=lagrangian_idx_tp1,
         dtau=lagrangian_dtau,
@@ -626,9 +630,21 @@ def _merged_batch(model, cfg: TrainConfig, bundle: DataBundle, xb, yb, wb, sw, d
             sq_t = torch.as_tensor(extras["pushforward_seq_q"][bsel], dtype=torch.float32, device=device)
             sd_t = torch.as_tensor(extras["pushforward_seq_dtau"][bsel], dtype=torch.float32, device=device)
             als = torch.as_tensor(extras["arcsinh_latent_scale"], dtype=torch.float32, device=device)
-            pf = L.pushforward_species_loss(model, sy_t, sq_t, sd_t, als)
+            sa = extras.get("pushforward_seq_abs")
+            sa_t = (torch.as_tensor(sa[bsel], dtype=torch.float32, device=device)
+                    if sa is not None else None)
+            pf, pf_parts = L.pushforward_species_loss(
+                model, sy_t, sq_t, sd_t, als,
+                seq_abs=sa_t,
+                absorption_from_rates_fn=abs_fn,
+                rates_to_physical_fn=extras.get("rates_to_physical_fn"),
+                energy_arcsinh_scale=float(extras.get("energy_arcsinh_scale", 1.0)),
+                energy_weight=cfg.loss.pushforward_energy_weight,
+                transport_mode=cfg.loss.transport_mode,
+            )
             _loss = _loss + cfg.loss.pushforward_weight * pf
             _parts["pushforward"] = float(pf.detach())
+            _parts.update(pf_parts)
     return _loss, _parts
 
 
@@ -840,6 +856,10 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         dydt_dry_train=dydt_dry_train if schema.has_dydt() else None,
         sigma_comp=sigma_comp_all,
     )
+    # stable latent ODE: give the model its per-dim field scale so model.latent_field is self-contained
+    # (used by the direct-transport pushforward, the dynamics-contraction penalty, and the C-UDF).
+    if hasattr(model, "set_latent_field_scale"):
+        model.set_latent_field_scale(arcsinh_latent_scale)
 
     # differentiable rate-derived absorption: unstandardize T from the thermo block
     import torch as _torch
@@ -987,7 +1007,7 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
 
     # store merged extras on bundle (split-local arrays keyed _train / _val)
     # Pushforward rollout sequences (species-space closed-loop tracking; opt-in via pushforward_weight)
-    pf_seq_ystd = pf_seq_q = pf_seq_dtau = None
+    pf_seq_ystd = pf_seq_q = pf_seq_dtau = pf_seq_abs = None
     if cfg.loss.pushforward_weight > 0.0:
         from .datamodule import case_step_sequences
         try:
@@ -1001,8 +1021,11 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
             pf_seq_ystd = _Xs[:, :, :n_in].astype(np.float32)
             pf_seq_q = _Xs[:, :, n_in:].astype(np.float32)
             pf_seq_dtau = _seq_dtau.astype(np.float32)
-            print(f"_train_merged: pushforward enabled — {len(_seq_idx)} K={cfg.loss.pushforward_steps} sequences",
-                  flush=True)
+            # true absorption S_E along each window (energy-aware pushforward target); _seq_idx is
+            # the SAME (already-subsampled) row index used for X_train, so alignment is exact.
+            pf_seq_abs = absorption_train[_seq_idx].astype(np.float32)   # (n_seq, K+1)
+            print(f"_train_merged: pushforward enabled — {len(_seq_idx)} K={cfg.loss.pushforward_steps} sequences"
+                  f"{' (+energy)' if cfg.loss.pushforward_energy_weight > 0.0 else ''}", flush=True)
         except KeyError:
             warnings.warn("case_step_sequences failed (missing tau/z); pushforward disabled.")
 
@@ -1010,6 +1033,7 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         "pushforward_seq_ystd": pf_seq_ystd,
         "pushforward_seq_q": pf_seq_q,
         "pushforward_seq_dtau": pf_seq_dtau,
+        "pushforward_seq_abs": pf_seq_abs,
         "pf_rng": np.random.default_rng(cfg.data.seed + 777),
         "comp_mean_active": comp_mean_active,
         "atom_nonconserving_projector": atom_nonconserving_projector,
@@ -1039,6 +1063,51 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         "energy_arcsinh_scale": energy_scale,
     }
 
+    # -- closed-loop composition rollout selector (checkpoint_metric='rollout_composition') --------
+    # The a-priori checkpoint metrics (energy_relrmse / total val) are blind to closed-loop
+    # composition drift — the quantity that bottlenecks the deployed ∫S_E (see the energy-pushforward
+    # negative result: adding energy could not beat a fixed composition-drift floor). This selector
+    # marches the latent over held-out VAL cases (batched, no-grad) exactly as the UDF does and scores
+    # PHYSICAL major-species tracking, so checkpointing picks the lowest closed-loop-drift epoch.
+    _ckpt_metric = getattr(cfg.optim, "checkpoint_metric", "total")
+    val_roll = None
+    if _ckpt_metric == "rollout_composition" and len(df_val):
+        _cid = df_val[schema.meta["CaseID"]].to_numpy()
+        _tau = df_val[schema.state["tau"]].to_numpy(float)
+        _majors = [s for s in MAJOR_SPECIES if s in bundle.spec.input_species]
+        _maj_idx = np.array([bundle.spec.input_species.index(s) for s in _majors], dtype=np.intp)
+        _cases = []
+        for c in np.unique(_cid):
+            rows = np.where(_cid == c)[0]
+            rows = rows[np.argsort(_tau[rows])]
+            if len(rows) >= 4 and np.all(np.diff(_tau[rows]) > 0):
+                _cases.append(rows)
+        _cases = _cases[:24]  # a representative subset keeps the per-epoch cost negligible
+        if _cases:
+            _Lmax = max(len(o) for o in _cases)
+            _C = len(_cases)
+            _Xpad = np.zeros((_C, _Lmax, n_in + 4), np.float32)
+            _dtau = np.zeros((_C, _Lmax - 1), np.float32)
+            _mask = np.zeros((_C, _Lmax), np.float32)
+            for i, o in enumerate(_cases):
+                _Xpad[i, :len(o)] = bundle.X_val[o]           # already-standardised features (row-aligned)
+                _dtau[i, :len(o) - 1] = np.diff(_tau[o])
+                _mask[i, :len(o)] = 1.0
+            _cscale = np.asarray(linear_comp_scaler.scale_, float)[_maj_idx]  # → physical mass-frac units
+            val_roll = {
+                "X": torch.as_tensor(_Xpad, device=device),
+                "dtau": torch.as_tensor(_dtau, device=device),
+                "mask": torch.as_tensor(_mask, device=device),
+                "maj_idx": torch.as_tensor(_maj_idx, dtype=torch.long, device=device),
+                "cscale": torch.as_tensor(_cscale, dtype=torch.float32, device=device),
+                "als": torch.as_tensor(arcsinh_latent_scale, dtype=torch.float32, device=device),
+                "Lmax": _Lmax,
+            }
+            print(f"_train_merged: rollout-composition checkpoint — {_C} val cases, Lmax={_Lmax} "
+                  f"(major species: {_majors})", flush=True)
+        else:
+            warnings.warn("rollout_composition requested but no valid val cases; using total val loss.")
+
     optimiser = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay)
     scheduler = _build_lr_scheduler(optimiser, cfg)
     use_energy_ckpt = (getattr(cfg.optim, "checkpoint_metric", "total") == "energy_relrmse"
@@ -1057,6 +1126,37 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
                     _absorption_from_rates(_rates_to_physical(o["rates"]), xb[:, n_in:]).cpu().numpy())
         return absorption_metrics(np.concatenate(preds), absorption_val)["rel_rmse"]
 
+    @torch.no_grad()
+    def _val_rollout_composition() -> float:
+        """Closed-loop major-species composition drift (physical abs-RMSE, median over val cases).
+
+        Marches every val case's latent as the UDF does (encode inlet → per step: project, decode,
+        advance z += Δτ·ω_Z), scoring physical major-species tracking against truth. Selecting on
+        THIS picks the epoch that tracks best in the closed loop — the drift that caps ∫S_E — which
+        the a-priori (true-state) metrics cannot see. ±50 latent clamp is an overflow guard only.
+        """
+        model.eval()
+        vr = val_roll
+        Y = vr["X"][:, :, :n_in]; Q = vr["X"][:, :, n_in:]
+        als = vr["als"]; mi = vr["maj_idx"]; csc = vr["cscale"]; mask = vr["mask"]
+        z = model.encode(Y[:, 0, :]).clamp(-50.0, 50.0)
+        sse = Y.new_zeros(Y.shape[0]); cnt = Y.new_zeros(Y.shape[0])
+        for i in range(vr["Lmax"]):
+            qi = Q[:, i, :]
+            zp = model.project(z, qi)
+            ystd = model.decode(zp, qi)
+            de = (ystd[:, mi] - Y[:, i, mi]) * csc.unsqueeze(0)      # physical major-species diff
+            step_mse = (de ** 2).mean(dim=1)
+            m = mask[:, i]
+            # torch.where (not *m) so a finished/blown-up case's NaN can't poison the sum via 0*NaN
+            sse = sse + torch.where(m > 0, step_mse, torch.zeros_like(step_mse))
+            cnt = cnt + m
+            if i < vr["Lmax"] - 1:
+                om = torch.sinh(model.latent_source(zp, qi).clamp(-20.0, 20.0)) * als.unsqueeze(0)
+                z = (zp + vr["dtau"][:, i].unsqueeze(1) * om).clamp(-50.0, 50.0)
+        per_case = torch.sqrt(sse / cnt.clamp(min=1.0))
+        return float(per_case.median())
+
     history: list[dict] = []
     best_val, best_state, since = float("inf"), None, 0
     _progress = os.environ.get("SCARFS_PROGRESS")
@@ -1067,8 +1167,13 @@ def _train_merged(cfg: TrainConfig, df, schema) -> dict:
         va, va_parts = _epoch(model, cfg, bundle, optimiser, train=False)
         if scheduler is not None:
             scheduler.step()
-        # Checkpoint on the deployed metric (val energy relRMSE) when configured, else total val loss.
-        monitor = _val_energy_relrmse() if use_energy_ckpt else (va if np.isfinite(va) else tr)
+        # Checkpoint metric: closed-loop composition drift > a-priori energy relRMSE > total val loss.
+        if val_roll is not None:
+            monitor = _val_rollout_composition()
+        elif use_energy_ckpt:
+            monitor = _val_energy_relrmse()
+        else:
+            monitor = va if np.isfinite(va) else tr
         history.append({"epoch": epoch, "train": tr, "val": va,
                         "train_parts": tr_parts, "val_parts": va_parts})
         improved = monitor < best_val
@@ -1292,6 +1397,11 @@ def _save_artifacts_merged(
         # Head output convention: rate head emits ArcsinhScaler-space values (physical =
         # scalers inverse); latent head emits arcsinh(omega_Z / s_Z) (physical = sinh(.)·s_Z).
         "head_space": "arcsinh_scaled",
+        # Transport: "reproject" = z<-E∘D(z)+Δτ·ω_Z(E∘D(z)); "direct" (stable latent ODE) =
+        # z<-z+Δτ·(sinh(ω_Z)·s_Z − β·z), NO re-projection, readout heads at raw z. β = field_damping.
+        "transport_mode": getattr(cfg.loss, "transport_mode", "reproject"),
+        "field_damping": (float(torch.nn.functional.softplus(model.field_damping_raw).item())
+                          if hasattr(model, "field_damping_raw") else 0.0),
         "energy_calibration": energy_calibration or {"scale": 1.0, "floor": 0.0},
         "rate_source": getattr(bundle.scalers, "rate_source", "r_mass"),
         "mech_yaml": cfg.data.mech_yaml,

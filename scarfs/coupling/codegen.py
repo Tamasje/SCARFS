@@ -751,15 +751,24 @@ def _numpy_mirror_eval(
     lat_max = np.asarray(stats["latent_env_max"], dtype=float)
     z = np.clip(z_raw, lat_min, lat_max)
 
-    # Manifold projection: decode -> re-encode
-    y_dec_std = _numpy_forward(z, q_nn, weights_dict["decoder_layers"])  # (B, n_dry)
-    z_proj = _numpy_encoder(y_dec_std, weights_dict["encoder_W"], weights_dict.get("encoder_mlp_layers"))        # (B, k)
+    # Transport map: DIRECT (stable latent ODE) reads heads at the RAW clamped z (mc_project is
+    # identity, no re-projection); REPROJECT re-encodes z_proj = E·decode(z). decode(z) is computed
+    # either way for the composition readout.
+    direct = spec.get("transport_mode") == "direct"
+    beta = float(spec.get("field_damping", 0.0))
+    y_dec_std = _numpy_forward(z, q_nn, weights_dict["decoder_layers"])  # (B, n_dry) = decode(z)
+    if direct:
+        z_proj = z
+    else:
+        z_proj = _numpy_encoder(y_dec_std, weights_dict["encoder_W"], weights_dict.get("encoder_mlp_layers"))  # (B, k)
 
     # Latent source ω_Z: head emits arcsinh(ω_Z / s_Z); physical = sinh(·)·s_Z.
     # The pre-sinh clip at ±20 is a pure overflow guard shared by torch/numpy/C.
     s_z = np.asarray(spec["arcsinh_latent_scale"], dtype=float)
     omega_z = _numpy_forward(z_proj, q_nn, weights_dict["latent_source_layers"])  # (B, k)
     omega_z = np.sinh(np.clip(omega_z, -20.0, 20.0)) * s_z
+    if direct:
+        omega_z = omega_z - beta * z  # stable-ODE transported field f = sinh(ω_Z)·s_Z − β·z
 
     # Energy absorption head
     raw_energy = _numpy_forward(z_proj, q_nn, weights_dict["energy_layers"])  # (B, 1)
@@ -892,13 +901,17 @@ def _torch_eval(
         lat_min_t = torch.as_tensor(lat_min)
         lat_max_t = torch.as_tensor(lat_max)
 
+        direct = spec.get("transport_mode") == "direct"
+        beta = float(spec.get("field_damping", 0.0))
         z = model.encode(y_std_t)
         z = torch.clamp(z, lat_min_t, lat_max_t)
         y_dec_std = model.decode(z, q_t)
-        z_proj = model.encode(y_dec_std)
+        z_proj = z if direct else model.encode(y_dec_std)  # direct: identity projection (heads read raw z)
         # head emits arcsinh(ω_Z / s_Z); physical = sinh(·)·s_Z (clip = shared overflow guard)
         s_z_t = torch.as_tensor(np.asarray(spec["arcsinh_latent_scale"], dtype=np.float32))
         omega_z = torch.sinh(model.latent_source(z_proj, q_t).clamp(-20.0, 20.0)) * s_z_t
+        if direct:
+            omega_z = omega_z - beta * z  # stable-ODE transported field f = sinh(ω_Z)·s_Z − β·z
         absorption = model.absorption(z_proj, q_t)
 
     y_dec_std_np = y_dec_std.numpy()
@@ -1199,6 +1212,14 @@ def _render_header(
         f"#define MC_N_THERMO   4        /* [T, P, 1/T, lnT] */",
         f"#define MC_MAX_WIDTH      {max_w}",
         "/* Layer counts: use MC_DEC_N_LAYERS etc. from the generated arrays below */",
+        "",
+        "/* --- Transport mode --- */",
+        *(["/* stable latent ODE: advance the RAW latent by z += Δτ·(sinh(ω_Z)·s_Z − β·z); NO E∘D",
+           "   re-projection (mc_project is identity), readout heads read raw z. β = field damping. */",
+           "#define MC_DIRECT_TRANSPORT 1",
+           f"#define MC_BETA  {_fmt(float(spec.get('field_damping', 0.0)))}  /* structural field damping β */"]
+          if spec.get("transport_mode") == "direct" else
+          ["/* transport_mode = reproject (legacy E∘D projection each iteration; MC_DIRECT_TRANSPORT off) */"]),
         "",
         "/* --- UDM layout (grafted from colleague's safety-flag UDM pattern) --- */",
         "#define MC_UDM_OOD_FLAG         0   /* 1 if any latent dim was OOD at last projection */",
@@ -1707,7 +1728,11 @@ static void mc_project(const double *z, const double *q, double *z_proj, double 
                 zq, y_std);
     if (y_std_out != NULL)
         for (i = 0; i < MC_N_DRY; ++i) y_std_out[i] = y_std[i];
+#ifdef MC_DIRECT_TRANSPORT
+    for (i = 0; i < MC_K; ++i) z_proj[i] = z[i];  /* stable latent ODE: NO re-projection; heads read raw z */
+#else
     mc_encode(y_std, z_proj);
+#endif
 }}
 
 /* Latent source omega_Z from z_proj + q */
@@ -1846,9 +1871,14 @@ static double mc_latent_source(cell_t c, Thread *t, int dim)
     for (i = 0; i < MC_K; ++i) z_raw[i] = C_UDSI(c, t, i);
     mc_build_q(T, P, q);
     mc_clamp_latent(z_raw, z);
-    mc_project(z, q, z_proj, NULL);
+    mc_project(z, q, z_proj, NULL);   /* direct: z_proj = clamped z (identity); reproject: E∘D(z) */
     mc_latent_source_vec(z_proj, q, omega_z);
+#ifdef MC_DIRECT_TRANSPORT
+    /* stable-ODE field f = sinh(ω_Z)·s_Z − β·z (the structural damping that bounds the transport) */
+    return C_R(c, t) * (omega_z[dim] - MC_BETA * z[dim]);
+#else
     return C_R(c, t) * omega_z[dim];
+#endif
 }}
 {transport_defs}
 {uds_sources}
@@ -2127,7 +2157,11 @@ static void mc_project(const double *z, const double *q, double *z_proj, double 
                 zq, y_std);
     if (y_std_out != NULL)
         for (i = 0; i < MC_N_DRY; ++i) y_std_out[i] = y_std[i];
+#ifdef MC_DIRECT_TRANSPORT
+    for (i = 0; i < MC_K; ++i) z_proj[i] = z[i];  /* stable latent ODE: NO re-projection; heads read raw z */
+#else
     mc_encode(y_std, z_proj);
+#endif
 }}
 
 static void mc_latent_source_vec(const double *z_proj, const double *q, double *omega_z)
@@ -2189,8 +2223,11 @@ int main(void)
         /* Manifold project */
         mc_project(z, q, z_proj, NULL);
 
-        /* Latent source */
+        /* Latent source (direct: transported field f = sinh(ω_Z)·s_Z − β·z; reproject: ω_Z) */
         mc_latent_source_vec(z_proj, q, omega_z);
+#ifdef MC_DIRECT_TRANSPORT
+        for (i = 0; i < MC_K; ++i) omega_z[i] -= MC_BETA * z[i];
+#endif
 
         /* Absorption / energy source */
         absorption = mc_absorption(z_proj, q);
