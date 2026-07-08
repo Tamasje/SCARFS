@@ -1,0 +1,50 @@
+SCARFS MergedCoil — Export Consistency Report
+================================================
+Generated: 2026-07-08 11:52:19
+Bundle kind: merged
+Input species count: 212
+Energy-active species: 61
+Latent dim k: 8
+Reference states: 6
+
+Method: re-evaluate the same static const arrays written to the C header
+using the Python numpy mirror, then compare to the torch forward pass.
+Y differences use denominator max(|torch|, 1e-4) to exclude sub-100ppm species
+(physically negligible mass fractions) from inflating relative error due to
+float32->float64 accumulation in the linear inversion Y = sigma*y_std + mu.
+All other differences are relative: |numpy - torch| / max(|torch|, 1e-30).
+
+Results (max over all reference states and outputs):
+  Decoded species Y            : 2.9109e-04
+  Latent source omega_Z        : 2.1468e-05
+  Energy source S_h            : 4.5213e-07
+
+Acceptance threshold: 1e-4 (float32 weights in float64 evaluation; LayerNorm
+networks accumulate O(k*eps_f32) error per normalised layer).
+Status: WARN (check below)
+
+Per-reference-state breakdown:
+   ref       T [K]        P [Pa]     max_rel_Y   max_rel_omz        rel_sh
+     0     1286.98      3.02e+05    9.9410e-06    2.4563e-06    1.1163e-07
+     1     1086.20      3.07e+05    2.1148e-05    1.7670e-06    4.5213e-07
+     2     1337.70      1.76e+05    6.3359e-06    1.6193e-06    5.5601e-28
+     3     1241.09       2.4e+05    1.1075e-05    2.1468e-05    5.3564e-75
+     4      879.65      2.24e+05    1.0689e-05    1.3556e-06    6.1045e-08
+     5     1407.83      3.35e+05    2.9109e-04    5.8786e-06    1.3502e-43
+
+Energy-clamp: 18300741253.376148 J/m3/s
+(Safety clamp ~1.3x train max; does NOT falsify predictions.)
+
+Colleague-file reference (what this rewrites):
+  /Users/tamasbuzogany/Documents/SCARFS/reduced_chem_ml/export_udf.py
+  Grafted: C skeleton structure (export_udf.py:43 export_fluent_udf),
+           TUI setup script (export_udf.py:1555 render_fluent_setup),
+           standalone harness pattern (export_udf.py:1253 render_standalone_harness),
+           export_consistency_report (export_udf.py:57 write_export_consistency_report),
+           folded inlet-BC generation (implicit in export_fluent_udf),
+           safety-flag UDM pattern (export_udf.py:476 RC_UDM_OOD / RC_UDM_ENERGY_SOURCE),
+           normalize closure logic (export_udf.py:1040 rc_decode_species_available
+               #RC_COMPOSITION_CLOSURE==2 block).
+  Rewritten: energy path entirely (was free-head chain-rule decode through PCA
+             with ±5.61e7 clamp; now rate-tied + distilled softplus head,
+             energy_clamp from full data range x1.3 ~1.6e9).
