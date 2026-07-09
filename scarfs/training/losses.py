@@ -315,6 +315,124 @@ def lagrangian_rollout_loss(
     return _mse(z_tp1_pred, z_tp1_true).mean()
 
 
+def pushforward_species_loss(
+    model,
+    seq_ystd: torch.Tensor,      # (M, K+1, n_dry)  standardised composition along the τ-window
+    seq_q: torch.Tensor,         # (M, K+1, n_thermo) standardised thermo per step
+    seq_dtau: torch.Tensor,      # (M, K)            Δτ between steps [s]
+    arcsinh_latent_scale: torch.Tensor,   # (k,)
+    clamp: float = 50.0,
+    *,
+    seq_abs: torch.Tensor | None = None,          # (M, K+1) true absorption S_E along the window [J m-3 s-1]
+    absorption_from_rates_fn=None,                # (rates_phys, q) -> S_E [J m-3 s-1]
+    rates_to_physical_fn=None,                    # scaled rate-head output -> physical mass rates
+    energy_arcsinh_scale: torch.Tensor | float = 1.0,
+    energy_weight: float = 0.0,
+    transport_mode: str = "reproject",
+) -> tuple[torch.Tensor, dict[str, float]]:
+    """Multi-step pushforward rollout loss in DECODED-SPECIES space (closed-loop tracking, F2/RC-2).
+
+    ``transport_mode``:
+    - ``"reproject"`` (default): the legacy loop z ← P(z)+Δτ·ω_Z(P(z)) with P=E∘D re-projection.
+    - ``"direct"`` (stable latent ODE): z ← z + Δτ·model.latent_field(z,q), NO re-projection; the
+      decoder/rate/energy heads read the RAW transported z. Stability comes from the field's
+      structural −β·z damping (+ the dynamics_contraction penalty), so the decoder stays faithful.
+
+    Pushforward trick (Brandstetter et al.): roll the latent K steps feeding the model its OWN output
+    WITHOUT gradient (clamped, to reach the drifted states the deployed loop actually visits), then
+    take a SINGLE gradient step from each visited state, decode to standardised composition, and match
+    the TRUE next composition. Back-prop touches only the single step (not the whole unstable unroll →
+    no gradient explosion), yet trains E/D/ω_Z to CORRECT their own drift — the closed-loop tracking
+    that 1-step (Lagrangian) and contraction-only training cannot give.
+
+        z_0 = E·y(inlet);  visited[j] reached by the no-grad rollout
+        loss = mean_j ‖ decode( project(visited[j]) + Δτ·ω_Z(project(visited[j])) ) − y_true[j+1] ‖²
+
+    Energy-aware term (``energy_weight`` > 0): the species term above trains only COMPOSITION
+    tracking, so the deployed energy S_E = Σ hᵢ·ω̇ᵢ is optimised only indirectly and its rollout
+    integral lags. When enabled, at each rolled step we ALSO evaluate the rate-derived absorption at
+    the DEPLOYED input — ``project(z_next)`` (the same E∘D state the UDF feeds its rate head) — and
+    match it (arcsinh-space, at the fixed physical scale) to the true S_E at that trajectory step.
+    Gradients reach the decoder, ω_Z AND the rate head, training them to keep the energy on track
+    while the composition drifts. Returns ``(total_loss, parts)`` for per-term logging.
+    """
+    K = seq_dtau.shape[1]
+    do_energy = (energy_weight > 0.0 and seq_abs is not None
+                 and absorption_from_rates_fn is not None and rates_to_physical_fn is not None)
+
+    direct = (transport_mode == "direct")
+
+    def omega(zp, q):  # physical ω_Z = sinh(arcsinh-head)·s_Z (head emits arcsinh-space)
+        return torch.sinh(model.latent_source(zp, q).clamp(-20.0, 20.0)) * arcsinh_latent_scale.unsqueeze(0)
+
+    def step(zin, dtau_col, q):
+        """One transport step. direct: z + Δτ·f(z) (no reproject); reproject: P(z) + Δτ·ω_Z(P(z))."""
+        if direct:
+            return zin + dtau_col * model.latent_field(zin, q)
+        zp = model.project(zin, q)
+        return zp + dtau_col * omega(zp, q)
+
+    with torch.no_grad():                                  # collect the visited (drifted) states
+        z = model.encode(seq_ystd[:, 0, :]).clamp(-clamp, clamp)
+        visited = [z]
+        for j in range(1, K):
+            z = step(z, seq_dtau[:, j - 1].unsqueeze(1), seq_q[:, j, :]).clamp(-clamp, clamp)
+            visited.append(z)
+
+    s_loss = seq_ystd.new_zeros(())
+    e_loss = seq_ystd.new_zeros(())
+    for j in range(K):                                     # 1-step grad from each visited state
+        zin = visited[j].detach()
+        qj1 = seq_q[:, j + 1, :]
+        z_next = step(zin, seq_dtau[:, j].unsqueeze(1), qj1)
+        y_pred_std = model.decode(z_next, qj1)
+        s_loss = s_loss + _mse(y_pred_std, seq_ystd[:, j + 1, :]).mean()
+        if do_energy:
+            # rate-head input at the rolled step: raw z_next (direct) or project(z_next) (reproject)
+            zpe = z_next if direct else model.project(z_next, qj1)
+            rates_phys = rates_to_physical_fn(model.rates_from_latent(zpe, qj1))
+            abs_pred = absorption_from_rates_fn(rates_phys, qj1).squeeze(-1)
+            e_loss = e_loss + energy_rate_tied_loss(
+                abs_pred, seq_abs[:, j + 1], energy_arcsinh_scale)
+
+    s_loss = s_loss / K
+    total = s_loss
+    parts = {"pf_species": float(s_loss.detach())}
+    if do_energy:
+        e_loss = e_loss / K
+        total = total + energy_weight * e_loss
+        parts["pf_energy"] = float(e_loss.detach())
+    return total, parts
+
+
+def dynamics_contraction_penalty(
+    model,
+    z: torch.Tensor,
+    q: torch.Tensor,
+    dtau: float,
+    gain_target: float = 1.0,
+    eps: float = 0.1,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Contraction of the DIRECT-transport map g(z) = z + Δτ·f(z,q) (stable-latent-ODE stability).
+
+    The stable-ODE deployment advances the latent WITHOUT the E∘D re-projection, so stability must
+    live in the field f = model.latent_field (which already carries a structural −β·z damping floor).
+    This penalises the residual expansion relu(‖g(z+δ)−g(z)‖/‖δ‖ − gain_target)² for random unit
+    perturbations δ, tightening the field so the deployed advance is non-expansive — the analogue of
+    the E∘D contraction penalty, but on the dynamics map, leaving the decoder free to be faithful.
+
+    Δτ is a representative (coarse storage-grid) step; the deployed CFD Δτ is finer ⇒ z+Δτ·f is closer
+    to identity ⇒ strictly more contractive, so enforcing it here is conservative. Returns
+    ``(penalty, mean_gain)``.
+    """
+    delta = torch.randn_like(z)
+    delta = delta / (delta.norm(dim=1, keepdim=True) + 1e-12) * eps
+    g0 = z + dtau * model.latent_field(z, q)
+    g1 = (z + delta) + dtau * model.latent_field(z + delta, q)
+    gain = (g1 - g0).norm(dim=1) / (delta.norm(dim=1) + 1e-12)
+    return (torch.relu(gain - gain_target) ** 2).mean(), gain.mean().detach()
+
+
 def atom_projection_penalty(
     rates_mass: torch.Tensor,
     molar_mass: torch.Tensor,
@@ -486,6 +604,17 @@ def merged_composite(
     transport_weight: float = 0.0,
     noise_std: float = 0.0,
     rollout_mode: str = "manifold",
+    # contraction penalty on the round-trip projection P=E∘D (a-posteriori stability)
+    contraction_weight: float = 0.0,
+    contraction_gain: float = 0.9,
+    contraction_eps: float = 0.1,
+    slow_manifold_weight: float = 0.0,
+    slow_manifold_gain: float = 0.5,
+    # stable latent ODE (direct transport, no E∘D re-projection)
+    transport_mode: str = "reproject",
+    dynamics_contraction_weight: float = 0.0,
+    dynamics_contraction_gain: float = 1.0,
+    dynamics_dtau: float = 1.0e-3,
     # lagrangian rollout (optional)
     idx_t: torch.Tensor | None = None,
     idx_tp1: torch.Tensor | None = None,
@@ -570,12 +699,14 @@ def merged_composite(
         Optional callable ``(rates_phys, q) -> (batch,)`` giving rate-derived absorption
         [J m-3 s-1].  If None, energy tie terms are skipped (e.g. B1b not yet integrated).
     """
-    # -- forward pass (single pass; heads read the noise-injected projected latent) -------
+    # -- forward pass (single pass; heads read the noise-injected latent) ------------------
     z = model.encode(y_std_scaled)
     y_recon = model.decode(z, q)
     z_proj = model.encoder(y_recon)                # manifold projection, reusing the decode
 
-    z_used = z_proj
+    # DIRECT (stable-ODE) transport feeds heads the RAW latent (that is what the UDF transports —
+    # no E∘D re-projection); REPROJECT mode feeds the manifold-projected latent (legacy).
+    z_used = z if transport_mode == "direct" else z_proj
     if noise_std > 0:
         z_used = z_used + noise_std * torch.randn_like(z_used)
 
@@ -584,9 +715,19 @@ def merged_composite(
     rates_pred = model.rates_from_latent(z_used, q)  # (batch, n_active)
     absorption_head = model.absorption(z_used, q)  # (batch, 1) strictly positive
 
-    # ground-truth latent source from the LIVE (detached) encoder: ż = E·(Ẏ_dry ⊘ σ_dry)
-    encoder_weight_full = model.encoder.weight.detach()            # (k, n_dry)
-    z_dot_true = (dydt_dry_phys / sigma_comp_all.unsqueeze(0)) @ encoder_weight_full.t()
+    # ground-truth latent source ż = d/dt E(Y_std) = J_E·(Ẏ_dry ⊘ σ_dry). For a LINEAR encoder
+    # J_E = W (constant) → the matmul below. For a NONLINEAR (MLP) encoder J_E is state-dependent →
+    # use a forward-mode JVP of the encoder at Y_std in the direction (Ẏ ⊘ σ). encoder_weight_full
+    # stays None in the nonlinear case, which auto-disables the linear-weight split-head consistency.
+    _ydot_std = dydt_dry_phys / sigma_comp_all.unsqueeze(0)
+    if getattr(model, "encoder_is_linear", True):
+        encoder_weight_full = model.encoder.weight.detach()        # (k, n_dry)
+        z_dot_true = _ydot_std @ encoder_weight_full.t()
+    else:
+        import torch.func as _tfunc
+        encoder_weight_full = None
+        _, z_dot_true = _tfunc.jvp(lambda _y: model.encode(_y), (y_std_scaled,), (_ydot_std,))
+        z_dot_true = z_dot_true.detach()
 
     # single inversion point: physical rates for the physics-facing terms (energy tie,
     # consistency, atom balance); identity when no inverse fn is supplied (tests/stubs).
@@ -650,7 +791,8 @@ def merged_composite(
             parts["energy_direct"] = float(etgt.detach())
 
     # -- 6. Split-head consistency -------------------------------------------------------
-    if latent_src is not None and rates_pred is not None and consistency_weight > 0.0:
+    if (latent_src is not None and rates_pred is not None and consistency_weight > 0.0
+            and encoder_weight_full is not None):  # linear-encoder-weight term; skipped for MLP encoder
         cpen = split_head_consistency(
             latent_src, rates_pred_phys, rho, dydt_dry_phys, z_dot_true,
             encoder_weight_full, active_col_idx, sigma_active,
@@ -677,6 +819,49 @@ def merged_composite(
         manifold = manifold_consistency(z_out, z_proj_out)
         total = total + manifold_weight * manifold
         parts["manifold"] = float(manifold.detach())
+
+    # -- 9b. Contraction of the round-trip projection P=E∘D (closed-loop stability) -------
+    # The deployed rollout advances z<-P(z)+Δτ·ω_Z(P(z)); it is stable iff P is non-expansive.
+    # Measured gain ≈6.6 ⇒ exponential drift. Penalise the directional gain exceeding the target
+    # for random latent perturbations, pushing grads into encoder+decoder to flatten the geometry.
+    if contraction_weight > 0.0:
+        delta = torch.randn_like(z_out)
+        delta = delta / (delta.norm(dim=1, keepdim=True) + 1e-12) * contraction_eps
+        p0 = model.project(z_out, q)
+        p1 = model.project(z_out + delta, q)
+        gain = (p1 - p0).norm(dim=1) / (delta.norm(dim=1) + 1e-12)
+        contraction = (torch.relu(gain - contraction_gain) ** 2).mean()
+        total = total + contraction_weight * contraction
+        parts["contraction"] = float(contraction.detach())
+        parts["contraction_gain_mean"] = float(gain.mean().detach())
+
+    # -- 9c. Slow-manifold (anisotropic) contraction: contract ONLY transverse-to-tangent modes ----
+    # The isotropic contraction over-damps the SLOW along-trajectory direction (→ wrong attractor).
+    # Here we contract only the FAST directions transverse to the trajectory tangent z_dot_true,
+    # leaving the slow mode free — the slow-manifold structure that gives Layer-2 attraction.
+    if slow_manifold_weight > 0.0:
+        t = z_dot_true / (z_dot_true.norm(dim=1, keepdim=True) + 1e-8)   # unit trajectory tangent
+        d = torch.randn_like(z_out)
+        d = d - (d * t).sum(dim=1, keepdim=True) * t                     # remove tangent ⇒ transverse
+        d = d / (d.norm(dim=1, keepdim=True) + 1e-12) * contraction_eps
+        p0 = model.project(z_out, q)
+        p1 = model.project(z_out + d, q)
+        gain_perp = (p1 - p0).norm(dim=1) / (d.norm(dim=1) + 1e-12)
+        slow = (torch.relu(gain_perp - slow_manifold_gain) ** 2).mean()
+        total = total + slow_manifold_weight * slow
+        parts["slow_manifold"] = float(slow.detach())
+        parts["slow_gain_perp_mean"] = float(gain_perp.mean().detach())
+
+    # -- 9d. Dynamics-map contraction (stable latent ODE, DIRECT transport) ----------------
+    # For direct transport the stability lives in the field: penalise the gain of z↦z+Δτ·f(z,q)
+    # (f=model.latent_field, already carrying the structural −β·z floor) so the deployed advance is
+    # non-expansive WITHOUT E∘D — leaving the decoder free to reconstruct composition faithfully.
+    if dynamics_contraction_weight > 0.0 and transport_mode == "direct":
+        dcp, dgain = dynamics_contraction_penalty(
+            model, z_out, q, dynamics_dtau, dynamics_contraction_gain, contraction_eps)
+        total = total + dynamics_contraction_weight * dcp
+        parts["dyn_contraction"] = float(dcp.detach())
+        parts["dyn_gain_mean"] = float(dgain)
 
     # -- 10. Atom-balance (physical rates) -------------------------------------------------
     if atom_balance_weight > 0.0 and molar_mass is not None and element_matrix is not None and rates_pred is not None:

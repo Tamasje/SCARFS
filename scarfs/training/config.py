@@ -82,6 +82,9 @@ class ModelConfig:
     latent_dim: int = 6                                 # neuralcoil / merged
     decoder_hidden: tuple[int, ...] = (128, 256)        # neuralcoil / merged
     rate_hidden: tuple[int, ...] = (128, 128)           # neuralcoil / merged
+    #: Encoder hidden widths. () = linear encoder (~PCA, default). Non-empty = MLP encoder — lets a
+    #: low-k latent parametrise the curved slow manifold (the low-k lever; merged model only).
+    encoder_hidden: tuple[int, ...] = ()
     activation: str = "silu"
     # -- merged-model additions ----------------------------------------------------------
     #: Hidden widths for the latent-source head (ω_Z(Z,q) -> k).
@@ -127,6 +130,13 @@ class OptimConfig:
     #: the latent term dominates — that criterion measurably discards the head's own
     #: optimum (overnight diagnosis E8 vs E9: head R² 0.636 @ 14 ep → 0.096 @ 60 ep).
     head_finetune_epochs: int = 0
+    #: Warm-start the merged model from a prior bundle's model.pt before training (Stage-B / fine-tune).
+    #: "" = fresh init (default). Used for the staged "freeze-encoder + pushforward" closed-loop fix.
+    init_from: str = ""
+    #: Freeze the encoder during training (Stage B): the encoder sets the manifold geometry that fixes
+    #: a-priori accuracy, so freezing it lets the closed-loop (pushforward/contraction) losses reshape
+    #: ONLY the decoder + ω_Z dynamics without trading away accuracy. False = all trainable (default).
+    freeze_encoder: bool = False
 
 
 @dataclass
@@ -192,6 +202,52 @@ class LossConfig:
     qoi_recon_weight: float = 0.0
     #: Rollout mode: "manifold" (existing multi-step) | "lagrangian" (same-case τ continuity).
     rollout_mode: str = "manifold"
+    #: Contraction penalty on the round-trip projection P=E∘D (closed-loop a-posteriori stability).
+    #: Penalises relu(‖P(z+δ)-P(z)‖/‖δ‖ − contraction_gain)² so the deployed latent map stops
+    #: amplifying perturbations (measured gain ≈6.6 ⇒ exponential drift). 0.0 = disabled (default;
+    #: preserves all existing runs). ~1.0 to enable. See scripts/diag_projection_gain.py.
+    contraction_weight: float = 0.0
+    #: Target Lipschitz gain for the round-trip projection (≤1 ⇒ contractive/stable).
+    contraction_gain: float = 0.9
+    #: Latent-perturbation scale (in encoder-output units) for the contraction penalty probe.
+    contraction_eps: float = 0.1
+    #: Multi-step PUSHFORWARD rollout loss in decoded-species space (closed-loop TRACKING; pairs with
+    #: contraction, which only gives boundedness). Pushforward-trick: roll K steps feeding the model its
+    #: own output (no-grad to reach drifted states), 1-step grad from each, decode and match true Y.
+    #: Trains E/D/ω_Z jointly to track truth off-manifold. 0.0 = disabled. ~0.5 to enable. See
+    #: LATENT_TRANSPORT_ADAPTATION.md and scripts/aposteriori_rollout.py.
+    pushforward_weight: float = 0.0
+    #: Pushforward rollout horizon K (number of integrated steps per sequence).
+    pushforward_steps: int = 8
+    #: ENERGY-aware pushforward: within the closed-loop rollout, ALSO match the rate-derived
+    #: absorption S_E = Σ hᵢ·ω̇ᵢ at each drifted-then-projected state to the true S_E along the
+    #: trajectory (arcsinh-space MSE, relative to pushforward_weight). The plain pushforward trains
+    #: only COMPOSITION tracking; the deployed energy quantity is optimised only indirectly, so the
+    #: rollout ∫S_E lags (~25%) even when composition tracks to ~2%. This term targets it directly.
+    #: 0.0 = disabled (default; plain species-only pushforward). ~0.5–1.0 to enable.
+    pushforward_energy_weight: float = 0.0
+    #: ADAPTATION #2 — slow-manifold (anisotropic) contraction. Contracts ONLY the directions
+    #: TRANSVERSE to the trajectory tangent (z_dot_true) — the fast/off-manifold modes — leaving the
+    #: slow along-trajectory direction free. Makes the manifold attracting (Layer-2 tracking) without
+    #: the isotropic contraction's over-damping of the slow dynamics. 0.0 = disabled. ~0.5 to enable.
+    slow_manifold_weight: float = 0.0
+    #: Target gain for the TRANSVERSE (fast) modes (<1 ⇒ they contract / are slaved to the manifold).
+    slow_manifold_gain: float = 0.5
+    #: STABLE LATENT ODE (2026-07-08). "reproject" (default) = legacy z←P(z)+Δτ·ω_Z(P(z)) with the
+    #: E∘D re-projection. "direct" = z←z+Δτ·model.latent_field(z,q), NO re-projection — the deployed
+    #: loop advances the raw latent by the stable field f=sinh(ω_Z)·s_Z−β·z. This decouples decoder
+    #: fidelity from transport stability (the E∘D contraction was what flattened the decoder and
+    #: capped composition reconstruction ⇒ ∫S_E). Pair with dynamics_contraction_weight, recon-priority
+    #: (recon_weight↑, qoi_recon↑), and decoder spectral_norm OFF (faithful decoder).
+    transport_mode: str = "reproject"
+    #: Weight on the dynamics-map contraction penalty relu(gain[z↦z+Δτ·f]−dynamics_contraction_gain)²
+    #: (direct mode only). Tightens the field's contraction beyond its structural −β·z floor. ~1.0.
+    dynamics_contraction_weight: float = 0.0
+    #: Target gain for the direct-transport map z↦z+Δτ·f(z,q) (≤1 ⇒ non-expansive / stable).
+    dynamics_contraction_gain: float = 1.0
+    #: Representative (coarse storage-grid) Δτ [s] for the dynamics-contraction probe; deployed CFD Δτ
+    #: is finer ⇒ strictly more contractive, so this is conservative.
+    dynamics_dtau: float = 1.0e-3
 
 
 @dataclass
@@ -215,7 +271,7 @@ class TrainConfig:
         """
         model_d = dict(d.get("model", {}))
         _tuple_fields_model = (
-            "hidden", "decoder_hidden", "rate_hidden",
+            "hidden", "decoder_hidden", "rate_hidden", "encoder_hidden",
             "latent_source_hidden", "energy_hidden", "transport_hidden",
         )
         for f in _tuple_fields_model:

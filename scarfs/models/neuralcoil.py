@@ -111,6 +111,30 @@ class NeuralCoil(nn.Module):
         return {"z": z, "z_proj": z_proj, "y_recon": y_recon, "rates": rates}
 
 
+class ResidualEncoder(nn.Module):
+    """Encoder z = W_lin·y + MLP(y), with the MLP's final layer ZERO-initialised.
+
+    At init the MLP contributes nothing, so ``encode`` == the linear (PCA-init) encoder — the proven
+    a-priori baseline. Training then adds only the nonlinear *curvature correction* needed to
+    parametrise the curved low-k slow manifold. This guarantees the nonlinear encoder can never
+    START below the linear one (the failure mode of a cold-start MLP encoder, 2026-07-05).
+    """
+
+    def __init__(self, n_dry: int, k: int, hidden: tuple[int, ...], activation: str, spectral_norm: bool):
+        super().__init__()
+        self.lin = nn.Linear(n_dry, k, bias=False)
+        self.mlp = make_mlp([n_dry, *hidden, k], activation=activation, layernorm=False,
+                            final_activation=None, spectral_norm=spectral_norm)
+        _lasts = [m for m in self.mlp.modules() if isinstance(m, nn.Linear)]
+        if _lasts:  # zero the MLP output layer -> encode == lin at init
+            nn.init.zeros_(_lasts[-1].weight)
+            if _lasts[-1].bias is not None:
+                nn.init.zeros_(_lasts[-1].bias)
+
+    def forward(self, y: torch.Tensor) -> torch.Tensor:
+        return self.lin(y) + self.mlp(y)
+
+
 class MergedCoil(nn.Module):
     """Split-head merged latent-space surrogate (plan §3 / §4 E-a – E-e).
 
@@ -163,6 +187,7 @@ class MergedCoil(nn.Module):
         spectral_norm: bool = False,
         n_transport: int = 0,
         transport_hidden: tuple[int, ...] = (64, 64),
+        encoder_hidden: tuple[int, ...] = (),
     ) -> None:
         super().__init__()
         self.n_dry = n_dry
@@ -171,13 +196,25 @@ class MergedCoil(nn.Module):
         self.n_transport = int(n_transport)
 
         k = latent_dim
-        self.encoder = nn.Linear(n_dry, k, bias=False)
-        # Decoder: standardised-space output (no sigmoid — caller handles composition contract)
+        # Encoder: linear (~PCA, default — constant Jacobian) OR a small MLP when encoder_hidden is
+        # set. A NONLINEAR encoder lets a low-k latent curve onto the (measured ~4-6D) slow manifold
+        # and recover energy info that a linear projection needs k=32 for — the low-k lever (2026-06-29).
+        self.encoder_hidden = tuple(encoder_hidden)
+        self.encoder_is_linear = not self.encoder_hidden
+        if self.encoder_is_linear:
+            self.encoder = nn.Linear(n_dry, k, bias=False)
+        else:
+            self.encoder = ResidualEncoder(n_dry, k, self.encoder_hidden, activation, spectral_norm)
+        # Decoder: standardised-space output (no sigmoid — caller handles composition contract).
+        # spectral_norm here bounds the decoder's Lipschitz constant — the map D in the latent
+        # projection z<-E·D(z); contracting it is the targeted fix for the closed-loop latent-
+        # transport amplification found a-posteriori (2026-06-24).
         self.decoder = make_mlp(
             [k + n_thermo, *decoder_hidden, n_dry],
             activation=activation,
             layernorm=False,
             final_activation=None,
+            spectral_norm=spectral_norm,
         )
         # Head 1: latent source ω_Z
         self.latent_source_net = make_mlp(
@@ -206,6 +243,16 @@ class MergedCoil(nn.Module):
         # Calibration buffers (set by set_energy_calibration after seeing training data)
         self.register_buffer("energy_scale", torch.tensor(1.0))
         self.register_buffer("energy_floor", torch.tensor(0.0))
+
+        # Stable latent-ODE transport (2026-07-08): the deployed loop can advance the latent DIRECTLY
+        # (dz/dτ = latent_field(z,q); NO E∘D re-projection) instead of z ← P(z)+Δτ·ω_Z(P(z)). This
+        # decouples decoder fidelity from transport stability — the E∘D re-projection was what forced
+        # the decoder flat (contraction penalty on P) and capped composition reconstruction (∴ ∫S_E).
+        # Stability instead comes from the FIELD: f = sinh(ω_Z)·s_Z − β·z, where the structural damping
+        # −β·z (β = softplus(field_damping_raw) ≥ 0) shifts every eigenvalue of ∂f/∂z down by β — a
+        # contraction floor — while the arcsinh ω_Z term carries the ~1e8 latent-velocity dynamic range.
+        self.register_buffer("latent_arcsinh_scale", torch.ones(k))
+        self.field_damping_raw = nn.Parameter(torch.tensor(-2.0))  # softplus(-2)≈0.13 initial damping
 
         # Head 4 (optional): transport properties (μ, k, …) — strictly positive via softplus.
         # n_transport == 0 disables it entirely (state-dict unchanged for the legacy contract).
@@ -245,6 +292,25 @@ class MergedCoil(nn.Module):
     def latent_source(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
         """Scaled latent-source ω_Z (shape ``(B, k)``) for CFD transport."""
         return self.latent_source_net(torch.cat([z, q], dim=-1))
+
+    def latent_field(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+        """Stable latent vector field f(z,q) = dz/dτ for DIRECT transport (no E∘D re-projection).
+
+        f = sinh(clamp(ω_Z))·s_Z − β·z:
+        - the arcsinh term (physical ω_Z = sinh(head)·s_Z) carries the wide latent-velocity range;
+        - the structural damping −β·z (β = softplus(field_damping_raw) ≥ 0) contributes −β·I to
+          ∂f/∂z everywhere, a construction-guaranteed contraction floor that keeps the deployed map
+          z ← z + Δτ·f non-expansive without flattening the (faithful) decoder.
+        Physical latent units [1/s]; the ±20 pre-sinh clamp is a pure overflow guard.
+        """
+        w = self.latent_source_net(torch.cat([z, q], dim=-1)).clamp(-20.0, 20.0)
+        beta = torch.nn.functional.softplus(self.field_damping_raw)
+        return torch.sinh(w) * self.latent_arcsinh_scale.unsqueeze(0) - beta * z
+
+    def set_latent_field_scale(self, s_z) -> None:
+        """Set the per-dim arcsinh latent-source scale buffer used by :meth:`latent_field`."""
+        s = torch.as_tensor(s_z, dtype=self.latent_arcsinh_scale.dtype).reshape(-1)
+        self.latent_arcsinh_scale.copy_(s)
 
     def rates_from_latent(self, z: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
         """Scaled physical production rates for energy-active species (``(B, n_energy_active)``)."""

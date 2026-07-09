@@ -1,0 +1,96 @@
+{
+  "data": {
+    "database_path": "Database_FINAL.parquet",
+    "input_species": "dry_all",
+    "target_species": "energy_active",
+    "val_fraction": 0.176,
+    "test_fraction": 0.15,
+    "split_by_case": true,
+    "inlet_conversion_threshold": 0.05,
+    "inlet_weight": 5.0,
+    "species_weights": {
+      "C2H4": 150,
+      "C3H6": 100,
+      "CH4": 20,
+      "H2": 10
+    },
+    "composition_feature_range": [
+      0.0,
+      1.0
+    ],
+    "seed": 0,
+    "energy_active_coverage": 0.999,
+    "mech_yaml": "chem_ForTransport.yaml",
+    "tail_strata": 10,
+    "tail_weight_alpha": 4.0,
+    "columns_projection": true,
+    "composition_sigma_floor": 1e-10
+  },
+  "model": {
+    "kind": "merged",
+    "latent_dim": 32,
+    "decoder_hidden": [
+      128,
+      256
+    ],
+    "rate_hidden": [
+      256,
+      256,
+      128
+    ],
+    "latent_source_hidden": [
+      128,
+      128
+    ],
+    "energy_hidden": [
+      64,
+      64
+    ],
+    "activation": "silu",
+    "spectral_norm": false,
+    "transport_outputs": 2,
+    "transport_hidden": [
+      64,
+      64
+    ]
+  },
+  "optim": {
+    "lr": 0.001,
+    "weight_decay": 1e-06,
+    "epochs": 800,
+    "batch_size": 4096,
+    "grad_clip": 1.0,
+    "patience": 150,
+    "head_finetune_epochs": 50,
+    "lr_schedule": "cosine",
+    "warmup_epochs": 10,
+    "min_lr_frac": 0.05,
+    "checkpoint_metric": "energy_relrmse"
+  },
+  "loss": {
+    "rate_weight": 1.0,
+    "latent_source_weight": 1.0,
+    "energy_weight": 1.0,
+    "energy_distill_weight": 0.25,
+    "energy_target_weight": 0.25,
+    "consistency_weight": 0.02,
+    "recon_weight": 1.0,
+    "qoi_recon_weight": 0.0,
+    "manifold_weight": 0.1,
+    "atom_balance_weight": 0.0,
+    "atom_projection_weight": 0.005,
+    "keq_weight": 0.0,
+    "keq_width": 1.0,
+    "realizability_weight": 0.01,
+    "realizability_dt": 0.001,
+    "transport_weight": 0.05,
+    "noise_std": 0.05,
+    "unroll_steps": 1,
+    "rollout_mode": "manifold",
+    "contraction_weight": 0.5,
+    "contraction_gain": 0.9,
+    "contraction_eps": 0.1
+  },
+  "output_dir": "runs/merged_contract090",
+  "_comment": "BEST MODEL (2026-06-29): k=32 + round-trip contraction penalty (weight=0.5, gain=0.9, eps=0.1). Held-out TEST energy relRMSE 0.0531 = 10.15x over baseline, R2 0.9970 \u2014 the 10x a-priori goal MET. NOTE run-to-run variance ~+/-1.5x. The contraction is an a-priori regularizer AND bounds the latent map (gain 6.6->~0.85), but free-running latent transport is still a-posteriori NON-tracking (see LATENT_TRANSPORT_ADAPTATION analysis). Deploy as a LOCAL species-source closure, or pursue the contraction+pushforward joint / slow-manifold adaptations before free-running latent transport."
+}

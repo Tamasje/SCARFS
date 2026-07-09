@@ -400,7 +400,9 @@ def _load_model_weights(
     from scarfs.models.neuralcoil import MergedCoil
 
     # Infer architecture from state dict shapes
-    k = state_dict["encoder.weight"].shape[0]  # latent dim
+    _resid_enc = "encoder.lin.weight" in state_dict   # residual (PCA + MLP) encoder
+    k = (state_dict["encoder.lin.weight"] if _resid_enc else state_dict["encoder.weight"]).shape[0]
+    encoder_hidden = tuple(spec.get("config_echo", {}).get("model", {}).get("encoder_hidden", ()) or ())
     n_thermo = 4
 
     # Determine hidden dims by examining sequential layers in each sub-network
@@ -427,6 +429,7 @@ def _load_model_weights(
         spectral_norm=False,
         n_transport=n_transport,
         transport_hidden=tp_sizes["hidden"] or (64, 64),
+        encoder_hidden=encoder_hidden,
     )
 
     # Load state dict (strict=False tolerates extra keys from parametrizations)
@@ -443,7 +446,8 @@ def _load_model_weights(
         "n_transport": n_transport,
         "energy_scale": float(model.energy_scale.detach().cpu().numpy()),
         "energy_floor": float(model.energy_floor.detach().cpu().numpy()),
-        "encoder_W": model.encoder.weight.detach().cpu().numpy(),  # (k, n_dry)
+        "encoder_W": (model.encoder.lin if _resid_enc else model.encoder).weight.detach().cpu().numpy(),  # (k, n_dry)
+        "encoder_mlp_layers": _extract_mlp_layers(model.encoder.mlp) if _resid_enc else None,  # residual correction
         "decoder_layers": _extract_mlp_layers(model.decoder),
         "latent_source_layers": _extract_mlp_layers(model.latent_source_net),
         "rate_layers": _extract_mlp_layers(model.rate_net),
@@ -687,9 +691,12 @@ def _numpy_softplus(x: np.ndarray) -> np.ndarray:
     return np.log1p(np.exp(-np.abs(x))) + np.maximum(x, 0.0)
 
 
-def _numpy_encoder(y_std: np.ndarray, encoder_W: np.ndarray) -> np.ndarray:
-    """Linear encoder: z = y_std @ W.T (bias=False)."""
-    return y_std @ encoder_W.T
+def _numpy_encoder(y_std: np.ndarray, encoder_W: np.ndarray, mlp_layers=None) -> np.ndarray:
+    """Encoder z = y_std @ W.T (+ MLP(y_std) for the residual encoder; bias-free linear branch)."""
+    z = y_std @ encoder_W.T
+    if mlp_layers:  # residual nonlinear correction: MLP takes y only (empty thermo block)
+        z = z + _numpy_forward(y_std, np.zeros((y_std.shape[0], 0), dtype=y_std.dtype), mlp_layers)
+    return z
 
 
 def _numpy_mirror_eval(
@@ -737,22 +744,31 @@ def _numpy_mirror_eval(
         q_nn = (q_nn - thermo_sc.mean_) / thermo_sc.scale_
 
     # Encode
-    z_raw = _numpy_encoder(y_std, weights_dict["encoder_W"])  # (B, k)
+    z_raw = _numpy_encoder(y_std, weights_dict["encoder_W"], weights_dict.get("encoder_mlp_layers"))  # (B, k)
 
     # Clamp latent to envelope
     lat_min = np.asarray(stats["latent_env_min"], dtype=float)
     lat_max = np.asarray(stats["latent_env_max"], dtype=float)
     z = np.clip(z_raw, lat_min, lat_max)
 
-    # Manifold projection: decode -> re-encode
-    y_dec_std = _numpy_forward(z, q_nn, weights_dict["decoder_layers"])  # (B, n_dry)
-    z_proj = _numpy_encoder(y_dec_std, weights_dict["encoder_W"])        # (B, k)
+    # Transport map: DIRECT (stable latent ODE) reads heads at the RAW clamped z (mc_project is
+    # identity, no re-projection); REPROJECT re-encodes z_proj = E·decode(z). decode(z) is computed
+    # either way for the composition readout.
+    direct = spec.get("transport_mode") == "direct"
+    beta = float(spec.get("field_damping", 0.0))
+    y_dec_std = _numpy_forward(z, q_nn, weights_dict["decoder_layers"])  # (B, n_dry) = decode(z)
+    if direct:
+        z_proj = z
+    else:
+        z_proj = _numpy_encoder(y_dec_std, weights_dict["encoder_W"], weights_dict.get("encoder_mlp_layers"))  # (B, k)
 
     # Latent source ω_Z: head emits arcsinh(ω_Z / s_Z); physical = sinh(·)·s_Z.
     # The pre-sinh clip at ±20 is a pure overflow guard shared by torch/numpy/C.
     s_z = np.asarray(spec["arcsinh_latent_scale"], dtype=float)
     omega_z = _numpy_forward(z_proj, q_nn, weights_dict["latent_source_layers"])  # (B, k)
     omega_z = np.sinh(np.clip(omega_z, -20.0, 20.0)) * s_z
+    if direct:
+        omega_z = omega_z - beta * z  # stable-ODE transported field f = sinh(ω_Z)·s_Z − β·z
 
     # Energy absorption head
     raw_energy = _numpy_forward(z_proj, q_nn, weights_dict["energy_layers"])  # (B, 1)
@@ -853,6 +869,8 @@ def _torch_eval(
     ls_sizes = _infer_mlp_sizes_from_layers(weights_dict["latent_source_layers"], k)
     rate_sizes = _infer_mlp_sizes_from_layers(weights_dict["rate_layers"], n_energy_active)
     en_sizes = _infer_mlp_sizes_from_layers(weights_dict["energy_layers"], 1)
+    enc_sizes = (_infer_mlp_sizes_from_layers(weights_dict["encoder_mlp_layers"], n_dry)
+                 if weights_dict.get("encoder_mlp_layers") else ())
 
     model = MergedCoil(
         n_dry=n_dry,
@@ -865,6 +883,7 @@ def _torch_eval(
         energy_hidden=en_sizes,
         activation="silu",
         spectral_norm=False,
+        encoder_hidden=enc_sizes,
     )
 
     # Set energy calibration buffers
@@ -882,13 +901,17 @@ def _torch_eval(
         lat_min_t = torch.as_tensor(lat_min)
         lat_max_t = torch.as_tensor(lat_max)
 
+        direct = spec.get("transport_mode") == "direct"
+        beta = float(spec.get("field_damping", 0.0))
         z = model.encode(y_std_t)
         z = torch.clamp(z, lat_min_t, lat_max_t)
         y_dec_std = model.decode(z, q_t)
-        z_proj = model.encode(y_dec_std)
+        z_proj = z if direct else model.encode(y_dec_std)  # direct: identity projection (heads read raw z)
         # head emits arcsinh(ω_Z / s_Z); physical = sinh(·)·s_Z (clip = shared overflow guard)
         s_z_t = torch.as_tensor(np.asarray(spec["arcsinh_latent_scale"], dtype=np.float32))
         omega_z = torch.sinh(model.latent_source(z_proj, q_t).clamp(-20.0, 20.0)) * s_z_t
+        if direct:
+            omega_z = omega_z - beta * z  # stable-ODE transported field f = sinh(ω_Z)·s_Z − β·z
         absorption = model.absorption(z_proj, q_t)
 
     y_dec_std_np = y_dec_std.numpy()
@@ -927,10 +950,9 @@ def _set_model_weights(model, weights_dict: dict[str, Any]) -> None:
     import torch
     import torch.nn as nn
 
-    # Encoder
-    model.encoder.weight.data = torch.as_tensor(
-        weights_dict["encoder_W"], dtype=torch.float32
-    )
+    # Encoder: linear branch (or the residual encoder's .lin); the MLP branch is loaded below.
+    _enc_lin = model.encoder.lin if hasattr(model.encoder, "lin") else model.encoder
+    _enc_lin.weight.data = torch.as_tensor(weights_dict["encoder_W"], dtype=torch.float32)
 
     def _load_seq(seq, layer_descs):
         linear_descs = [d for d in layer_descs if d["type"] == "linear"]
@@ -953,6 +975,8 @@ def _set_model_weights(model, weights_dict: dict[str, Any]) -> None:
     _load_seq(model.latent_source_net, weights_dict["latent_source_layers"])
     _load_seq(model.rate_net, weights_dict["rate_layers"])
     _load_seq(model.energy_net, weights_dict["energy_layers"])
+    if weights_dict.get("encoder_mlp_layers") and hasattr(model.encoder, "mlp"):
+        _load_seq(model.encoder.mlp, weights_dict["encoder_mlp_layers"])
 
 
 # ---------------------------------------------------------------------------
@@ -1136,6 +1160,8 @@ def _max_layer_width(weights_dict: dict[str, Any]) -> int:
     net_keys = ["decoder_layers", "latent_source_layers", "rate_layers", "energy_layers"]
     if weights_dict.get("n_transport", 0) > 0 and "transport_layers" in weights_dict:
         net_keys.append("transport_layers")
+    if weights_dict.get("encoder_mlp_layers"):
+        net_keys.append("encoder_mlp_layers")
     for net_key in net_keys:
         for d in weights_dict[net_key]:
             if d["type"] == "linear":
@@ -1186,6 +1212,14 @@ def _render_header(
         f"#define MC_N_THERMO   4        /* [T, P, 1/T, lnT] */",
         f"#define MC_MAX_WIDTH      {max_w}",
         "/* Layer counts: use MC_DEC_N_LAYERS etc. from the generated arrays below */",
+        "",
+        "/* --- Transport mode --- */",
+        *(["/* stable latent ODE: advance the RAW latent by z += Δτ·(sinh(ω_Z)·s_Z − β·z); NO E∘D",
+           "   re-projection (mc_project is identity), readout heads read raw z. β = field damping. */",
+           "#define MC_DIRECT_TRANSPORT 1",
+           f"#define MC_BETA  {_fmt(float(spec.get('field_damping', 0.0)))}  /* structural field damping β */"]
+          if spec.get("transport_mode") == "direct" else
+          ["/* transport_mode = reproject (legacy E∘D projection each iteration; MC_DIRECT_TRANSPORT off) */"]),
         "",
         "/* --- UDM layout (grafted from colleague's safety-flag UDM pattern) --- */",
         "#define MC_UDM_OOD_FLAG         0   /* 1 if any latent dim was OOD at last projection */",
@@ -1240,6 +1274,10 @@ def _render_header(
         "/* --- Encoder weight (k × n_dry, row-major: z = W_enc @ y_std) --- */",
         _c_double_array("MC_ENC_W", weights_dict["encoder_W"].ravel()),
         "",
+        *(["#define MC_HAS_ENCMLP 1",
+           "/* --- Residual encoder MLP: z += MLP(y_std); input y_std (n_dry), output k --- */",
+           _render_weights_for_net("MC_ENCMLP", weights_dict["encoder_mlp_layers"]), ""]
+          if weights_dict.get("encoder_mlp_layers") else []),
         "/* --- Decoder MLP (SiLU hidden, linear out; input: [z | q], output: y_std) --- */",
         _render_weights_for_net("MC_DEC", weights_dict["decoder_layers"]),
         "",
@@ -1653,6 +1691,16 @@ static void mc_encode(const double *y_std, double *z)
         for (j = 0; j < MC_N_DRY; ++j) s += MC_ENC_W[i * MC_N_DRY + j] * y_std[j];
         z[i] = s;
     }}
+#ifdef MC_HAS_ENCMLP
+    {{  /* residual encoder: z += MLP(y_std) (nonlinear curvature correction) */
+        double _e[MC_K]; int _i;
+        mc_net_eval(MC_ENCMLP_N_LAYERS, MC_ENCMLP_LAYER_TYPES, MC_ENCMLP_N_LINEAR,
+                    MC_ENCMLP_IN, MC_ENCMLP_OUT, MC_ENCMLP_W, MC_ENCMLP_B,
+                    MC_ENCMLP_N_LN, MC_ENCMLP_LN_GAMMA, MC_ENCMLP_LN_BETA, MC_ENCMLP_LN_EPS_ARR,
+                    y_std, _e);
+        for (_i = 0; _i < MC_K; ++_i) z[_i] += _e[_i];
+    }}
+#endif
 }}
 
 /* Clamp latent to training envelope; returns 1 if any dim was clamped, else 0 */
@@ -1680,7 +1728,11 @@ static void mc_project(const double *z, const double *q, double *z_proj, double 
                 zq, y_std);
     if (y_std_out != NULL)
         for (i = 0; i < MC_N_DRY; ++i) y_std_out[i] = y_std[i];
+#ifdef MC_DIRECT_TRANSPORT
+    for (i = 0; i < MC_K; ++i) z_proj[i] = z[i];  /* stable latent ODE: NO re-projection; heads read raw z */
+#else
     mc_encode(y_std, z_proj);
+#endif
 }}
 
 /* Latent source omega_Z from z_proj + q */
@@ -1819,9 +1871,14 @@ static double mc_latent_source(cell_t c, Thread *t, int dim)
     for (i = 0; i < MC_K; ++i) z_raw[i] = C_UDSI(c, t, i);
     mc_build_q(T, P, q);
     mc_clamp_latent(z_raw, z);
-    mc_project(z, q, z_proj, NULL);
+    mc_project(z, q, z_proj, NULL);   /* direct: z_proj = clamped z (identity); reproject: E∘D(z) */
     mc_latent_source_vec(z_proj, q, omega_z);
+#ifdef MC_DIRECT_TRANSPORT
+    /* stable-ODE field f = sinh(ω_Z)·s_Z − β·z (the structural damping that bounds the transport) */
+    return C_R(c, t) * (omega_z[dim] - MC_BETA * z[dim]);
+#else
     return C_R(c, t) * omega_z[dim];
+#endif
 }}
 {transport_defs}
 {uds_sources}
@@ -2065,6 +2122,16 @@ static void mc_encode(const double *y_std, double *z)
         for (j = 0; j < MC_N_DRY; ++j) s += MC_ENC_W[i * MC_N_DRY + j] * y_std[j];
         z[i] = s;
     }}
+#ifdef MC_HAS_ENCMLP
+    {{  /* residual encoder: z += MLP(y_std) (nonlinear curvature correction) */
+        double _e[MC_K]; int _i;
+        mc_net_eval(MC_ENCMLP_N_LAYERS, MC_ENCMLP_LAYER_TYPES, MC_ENCMLP_N_LINEAR,
+                    MC_ENCMLP_IN, MC_ENCMLP_OUT, MC_ENCMLP_W, MC_ENCMLP_B,
+                    MC_ENCMLP_N_LN, MC_ENCMLP_LN_GAMMA, MC_ENCMLP_LN_BETA, MC_ENCMLP_LN_EPS_ARR,
+                    y_std, _e);
+        for (_i = 0; _i < MC_K; ++_i) z[_i] += _e[_i];
+    }}
+#endif
 }}
 
 static int mc_clamp_latent(const double *z_in, double *z_out)
@@ -2090,7 +2157,11 @@ static void mc_project(const double *z, const double *q, double *z_proj, double 
                 zq, y_std);
     if (y_std_out != NULL)
         for (i = 0; i < MC_N_DRY; ++i) y_std_out[i] = y_std[i];
+#ifdef MC_DIRECT_TRANSPORT
+    for (i = 0; i < MC_K; ++i) z_proj[i] = z[i];  /* stable latent ODE: NO re-projection; heads read raw z */
+#else
     mc_encode(y_std, z_proj);
+#endif
 }}
 
 static void mc_latent_source_vec(const double *z_proj, const double *q, double *omega_z)
@@ -2152,8 +2223,11 @@ int main(void)
         /* Manifold project */
         mc_project(z, q, z_proj, NULL);
 
-        /* Latent source */
+        /* Latent source (direct: transported field f = sinh(ω_Z)·s_Z − β·z; reproject: ω_Z) */
         mc_latent_source_vec(z_proj, q, omega_z);
+#ifdef MC_DIRECT_TRANSPORT
+        for (i = 0; i < MC_K; ++i) omega_z[i] -= MC_BETA * z[i];
+#endif
 
         /* Absorption / energy source */
         absorption = mc_absorption(z_proj, q);
@@ -2237,7 +2311,7 @@ def _render_inlet_bc(
     y_std = (Y_dry - comp_mean) / comp_scale
 
     # Encode
-    z_in = _numpy_encoder(y_std[np.newaxis, :], weights_dict["encoder_W"])[0]
+    z_in = _numpy_encoder(y_std[np.newaxis, :], weights_dict["encoder_W"], weights_dict.get("encoder_mlp_layers"))[0]
 
     # Also compute with T/P clamped (same as what Fluent will see)
     T_nn = float(np.clip(inlet.T, stats["T_train_min"], stats["T_train_max"]))
