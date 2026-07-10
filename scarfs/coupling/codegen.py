@@ -1365,6 +1365,33 @@ def _render_header(
             "",
         ]
 
+        # --- Composition-dependent Cp (yi route): per-species NASA7 cp over the Fluent species field.
+        # Fluent's DEFINE_SPECIFIC_HEAT can vary Cp per cell ONLY through the species mass fractions
+        # yi (no cell access), so the deployment carries a species mixture = [energy_active..., H2O]
+        # (species TRANSPORT EQUATIONS OFF; mc_manifold_project syncs the decoded composition into
+        # C_YI each iteration). The Fluent mixture species MUST be defined in exactly this order.
+        _inp = spec["input"]; _ea = list(spec["energy_active"])
+        _ea_to_input = [int(_inp.index(s)) for s in _ea]
+        from scarfs.models.thermo import SpeciesThermo as _ST
+        _h2o = _ST.from_mechanism_yaml(spec.get("mech_yaml", "chem_ForTransport.yaml"), ["H2O"])
+        _species_order = _ea + ["H2O"]
+        lines += [
+            "/* --- Composition-dependent Cp (yi route): Fluent species = [energy_active..., H2O] --- */",
+            "#ifndef MC_CP_COMPOSITION_DEPENDENT",
+            "#define MC_CP_COMPOSITION_DEPENDENT 1   /* 1 = Cp/enthalpy from yi + NASA7 (needs the species mixture); 0 = T-only table */",
+            "#endif",
+            f"#define MC_N_CP_SPECIES  {len(_species_order)}   /* energy_active + H2O; Fluent mixture must match MC_CP_SPECIES_ORDER */",
+            "/* Fluent mixture species order (0-indexed) — define the material's species in THIS order: */",
+            "/*   " + "  ".join(f"{i}:{s}" for i, s in enumerate(_species_order)) + " */",
+            "/* map: decoded-Y (input) index feeding each energy-active Fluent species (H2O is the bulk) */",
+            _c_int_array("MC_EA_TO_INPUT", _ea_to_input),
+            "/* H2O NASA7 (last mixture species): low/high 7-coeff blocks + T_mid */",
+            _c_double_array("MC_NASA_H2O_LOW", np.asarray(_h2o._coeffs_low[0], float)),
+            _c_double_array("MC_NASA_H2O_HIGH", np.asarray(_h2o._coeffs_high[0], float)),
+            f"#define MC_NASA_H2O_TMID  {_fmt(float(_h2o._t_mid[0]))}",
+            "",
+        ]
+
     # --- Thermodynamic property tables (density via ideal gas + Cp DEFINE_SPECIFIC_HEAT) ---
     # The model outputs no density/MW/Cp, so density = P·M(decoded Y)/(R·T) and Cp = a T-only NASA7
     # mixture table. MC_DIRECT_DENSITY is a placeholder switch (0 = ideal gas; direct prediction
@@ -1602,7 +1629,10 @@ DEFINE_PROPERTY(mc_thermal_conductivity, c, t)
 # ideal-gas from the mean molecular weight of the DECODED composition, and Cp is a T-only NASA7
 # mixture table (DEFINE_SPECIFIC_HEAT exposes no cell state). Plain C — header macros only.
 _DENSITY_CP_C_DEFS = r"""
-/* ---- Density (ideal gas from mean MW) + specific heat (T-table) + speed of sound ---- */
+/* ---- Density (ideal gas from mean MW) + specific heat + speed of sound ---- */
+#ifndef MC_CP_COMPOSITION_DEPENDENT
+#define MC_CP_COMPOSITION_DEPENDENT 0   /* header sets 1 when the NASA7 species set is available */
+#endif
 
 /* Mean molecular weight [kg/kmol] from the decoded dry mass fractions + H2O closure. */
 static double mc_mean_molecular_weight(const double *Y_dry)
@@ -1655,14 +1685,58 @@ static double mc_cp_integral(double T)
     return MC_CP_H_KNOTS[MC_CP_N - 1];
 }
 
-/* DEFINE_SPECIFIC_HEAT: mixture cp(T) + sensible enthalpy. Fluent's macro exposes no cell/UDS
- * state, so this uses the robust T-only mixture table (representative composition). Hook in Fluent:
- * Materials > <mixture> > Cp > user-defined > mc_specific_heat. */
+#if MC_CP_COMPOSITION_DEPENDENT
+/* Per-species mass-specific Cp [J/kg/K] from NASA7 for the energy-active species (Cp/R polynomial). */
+static void mc_cp_mass_active(double T, double *cp)
+{
+    int i; double Tt = (T > 1.0e-300) ? T : 1.0e-300;
+    double T2 = Tt*Tt, T3 = T2*Tt, T4 = T3*Tt;
+    for (i = 0; i < MC_N_ACTIVE; ++i) {
+        const double *a = (Tt > MC_NASA_TMID[i]) ? &MC_NASA_HIGH[i*7] : &MC_NASA_LOW[i*7];
+        double cp_r = a[0] + a[1]*Tt + a[2]*T2 + a[3]*T3 + a[4]*T4;   /* Cp/R */
+        cp[i] = MC_R_GAS * cp_r / MC_MOLAR_MASS[i];
+    }
+}
+/* H2O (the mixture's last/bulk species) Cp [J/kg/K] and enthalpy [J/kg] from NASA7. */
+static double mc_cp_h2o(double T)
+{
+    double Tt = (T > 1.0e-300) ? T : 1.0e-300, T2 = Tt*Tt, T3 = T2*Tt, T4 = T3*Tt;
+    const double *a = (Tt > MC_NASA_H2O_TMID) ? MC_NASA_H2O_HIGH : MC_NASA_H2O_LOW;
+    return MC_R_GAS * (a[0] + a[1]*Tt + a[2]*T2 + a[3]*T3 + a[4]*T4) / MC_MW_H2O;
+}
+static double mc_h_h2o(double T)
+{
+    double Tt = (T > 1.0e-300) ? T : 1.0e-300, T2 = Tt*Tt, T3 = T2*Tt, T4 = T3*Tt;
+    const double *a = (Tt > MC_NASA_H2O_TMID) ? MC_NASA_H2O_HIGH : MC_NASA_H2O_LOW;
+    double h_rt = a[0] + a[1]*Tt/2.0 + a[2]*T2/3.0 + a[3]*T3/4.0 + a[4]*T4/5.0 + a[5]/Tt;
+    return MC_R_GAS * Tt * h_rt / MC_MW_H2O;
+}
+#endif
+
+/* DEFINE_SPECIFIC_HEAT: mixture Cp + sensible enthalpy. Fluent exposes no cell here — only the
+ * species mass fractions yi — so composition dependence rides on yi (MC_CP_COMPOSITION_DEPENDENT=1,
+ * species = [energy_active..., H2O]): cp = Σ yi_i·cp_i(T), h = Σ yi_i·(h_i(T)-h_i(Tref)) via NASA7.
+ * The formation-enthalpy term cancels in the T→Tref difference, giving the sensible enthalpy Fluent
+ * wants. Fallback (=0): the robust T-only mixture table. Hook: Materials > <mixture> > Cp >
+ * user-defined > mc_specific_heat. */
 DEFINE_SPECIFIC_HEAT(mc_specific_heat, T, Tref, h, yi)
 {
+#if MC_CP_COMPOSITION_DEPENDENT
+    double cpA[MC_N_ACTIVE], hT[MC_N_ACTIVE], hR[MC_N_ACTIVE];
+    double cp = 0.0, hh = 0.0; int i;
+    mc_cp_mass_active((double)T, cpA);
+    mc_h_mass((double)T, hT);            /* per-species enthalpy incl. formation (mc_h_mass from the */
+    mc_h_mass((double)Tref, hR);         /* rate-energy helpers); the difference is the sensible part */
+    for (i = 0; i < MC_N_ACTIVE; ++i) { cp += yi[i]*cpA[i]; hh += yi[i]*(hT[i]-hR[i]); }
+    cp += yi[MC_N_ACTIVE] * mc_cp_h2o((double)T);
+    hh += yi[MC_N_ACTIVE] * (mc_h_h2o((double)T) - mc_h_h2o((double)Tref));
+    *h = (real)hh;
+    return (real)cp;
+#else
     real cp = (real)mc_cp_lookup((double)T);
     *h = (real)(mc_cp_integral((double)T) - mc_cp_integral((double)Tref));
     return cp;
+#endif
 }
 
 /* DEFINE_PROPERTY: mixture density [kg/m3]. Default = ideal gas from the mean MW of the decoded
@@ -2023,6 +2097,12 @@ DEFINE_ADJUST(mc_manifold_project, domain)
                 C_UDMI(c, t, MC_UDM_Y_START + i) = Y[i];
             /* mean molecular weight from the decoded composition -> ideal-gas density hook */
             C_UDMI(c, t, MC_UDM_WMEAN) = mc_mean_molecular_weight(Y);
+#if MC_CP_COMPOSITION_DEPENDENT
+            /* sync decoded composition into the Fluent species field so DEFINE_SPECIFIC_HEAT sees it
+               via yi (species TRANSPORT EQUATIONS must be OFF; H2O is the bulk species = 1 - sum). */
+            for (i = 0; i < MC_N_ACTIVE; ++i)
+                C_YI(c, t, i) = Y[MC_EA_TO_INPUT[i]];
+#endif
             for (i = 0; i < MC_K; ++i)
                 C_UDMI(c, t, MC_UDM_Z_START + i) = z[i];
 
