@@ -3,15 +3,16 @@
 ; Load/compile merged_coil_udf.c + merged_coil_udf.h as compiled UDFs first.
 ;
 ; Required UDS equations: 8  (latent dimensions z_0 .. z_7)
-; Required UDM slots: 225
+; Required UDM slots: 226
 ;
 ; UDM layout:
 ;   [0] OOD flag  [1] latent-clamp count  [2] energy-clamp count  [3] last S_h
 ;   [4 .. 11] decoded z_i
 ;   [12 .. 223] decoded Y_i
+;   [224] abs-head cross-check   [225] mean molecular weight
 ;
 ; Allocate UDM slots:
-/define/user-defined/user-defined-memory 225
+/define/user-defined/user-defined-memory 226
 ;
 ; Hook DEFINE_ADJUST (manifold projection + UDM update each iteration):
 ;   Define > User-Defined > Adjust > mc_manifold_project
@@ -28,6 +29,14 @@
 ;
 ; Hook energy equation source term:
 ;   Define > User-Defined > Source Terms > Energy > mc_energy_source
+;
+; Hook material properties (Materials > <your mixture material> > user-defined):
+;   Density              -> mc_density            (ideal gas: rho = P*M/(R*T), M from decoded Y)
+;   Cp (specific heat)   -> mc_specific_heat      (T-only NASA7 mixture table)
+;   Viscosity            -> mc_viscosity          (transport head)
+;   Thermal conductivity -> mc_thermal_conductivity (transport head)
+;   Speed of sound       -> mc_speed_of_sound     (only needed for density-based/compressible solver)
+;   NOTE density uses UDM_WMEAN, set by mc_manifold_project; run one adjust before relying on it.
 ;
 ; Under-relaxation note:
 ;   URF starts at MC_URF0=0.2 and ramps to 1.0 at iteration MC_URF_RAMP_ITERS=500.

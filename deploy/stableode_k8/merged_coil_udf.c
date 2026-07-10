@@ -258,6 +258,107 @@ static double mc_absorption_from_rates(const double *z_proj, const double *q, do
     return s;
 }
 
+
+/* ---- Density (ideal gas from mean MW) + specific heat (T-table) + speed of sound ---- */
+
+/* Mean molecular weight [kg/kmol] from the decoded dry mass fractions + H2O closure. */
+static double mc_mean_molecular_weight(const double *Y_dry)
+{
+    double invM = 0.0, sumY = 0.0, yh2o;
+    int i;
+    for (i = 0; i < MC_N_DRY; ++i) {
+        double y = (Y_dry[i] > 0.0) ? Y_dry[i] : 0.0;
+        sumY += y;
+        invM += y / MC_MW_DRY[i];
+    }
+    yh2o = 1.0 - sumY; if (yh2o < 0.0) yh2o = 0.0;   /* H2O is the closure remainder */
+    invM += yh2o / MC_MW_H2O;
+    return (invM > 1.0e-12) ? 1.0 / invM : 28.0;
+}
+
+/* Mixture Cp(T) [J/kg/K] — linear interpolation on the representative T-only table (clamped ends). */
+static double mc_cp_lookup(double T)
+{
+    int i; double dT, f;
+    if (T <= MC_CP_T_KNOTS[0]) return MC_CP_KNOTS[0];
+    if (T >= MC_CP_T_KNOTS[MC_CP_N - 1]) return MC_CP_KNOTS[MC_CP_N - 1];
+    for (i = 0; i < MC_CP_N - 1; ++i) {
+        if (T <= MC_CP_T_KNOTS[i + 1]) {
+            dT = MC_CP_T_KNOTS[i + 1] - MC_CP_T_KNOTS[i];
+            if (dT < 1.0e-20) return MC_CP_KNOTS[i];
+            f = (T - MC_CP_T_KNOTS[i]) / dT;
+            return MC_CP_KNOTS[i] + f * (MC_CP_KNOTS[i + 1] - MC_CP_KNOTS[i]);
+        }
+    }
+    return MC_CP_KNOTS[MC_CP_N - 1];
+}
+
+/* Enthalpy integral H(T)=∫_Tmin^T cp dT [J/kg]; linear extrapolation with the end cp beyond range. */
+static double mc_cp_integral(double T)
+{
+    int i; double dT, slope, dt;
+    if (T <= MC_CP_T_KNOTS[0]) return (T - MC_CP_T_KNOTS[0]) * MC_CP_KNOTS[0];
+    if (T >= MC_CP_T_KNOTS[MC_CP_N - 1])
+        return MC_CP_H_KNOTS[MC_CP_N - 1] + (T - MC_CP_T_KNOTS[MC_CP_N - 1]) * MC_CP_KNOTS[MC_CP_N - 1];
+    for (i = 0; i < MC_CP_N - 1; ++i) {
+        if (T <= MC_CP_T_KNOTS[i + 1]) {
+            dT = MC_CP_T_KNOTS[i + 1] - MC_CP_T_KNOTS[i];
+            if (dT < 1.0e-20) return MC_CP_H_KNOTS[i];
+            slope = (MC_CP_KNOTS[i + 1] - MC_CP_KNOTS[i]) / dT;
+            dt = T - MC_CP_T_KNOTS[i];
+            return MC_CP_H_KNOTS[i] + MC_CP_KNOTS[i] * dt + 0.5 * slope * dt * dt;
+        }
+    }
+    return MC_CP_H_KNOTS[MC_CP_N - 1];
+}
+
+/* DEFINE_SPECIFIC_HEAT: mixture cp(T) + sensible enthalpy. Fluent's macro exposes no cell/UDS
+ * state, so this uses the robust T-only mixture table (representative composition). Hook in Fluent:
+ * Materials > <mixture> > Cp > user-defined > mc_specific_heat. */
+DEFINE_SPECIFIC_HEAT(mc_specific_heat, T, Tref, h, yi)
+{
+    real cp = (real)mc_cp_lookup((double)T);
+    *h = (real)(mc_cp_integral((double)T) - mc_cp_integral((double)Tref));
+    return cp;
+}
+
+/* DEFINE_PROPERTY: mixture density [kg/m3]. Default = ideal gas from the mean MW of the decoded
+ * composition (stored in UDM_WMEAN by mc_manifold_project): rho = P*M/(R*T). Hook in Fluent:
+ * Materials > <mixture> > Density > user-defined > mc_density. */
+DEFINE_PROPERTY(mc_density, c, t)
+{
+    double T = C_T(c, t);
+    double P = C_P(c, t) + MC_OPERATING_PRESSURE_PA;
+    double M, rho;
+#if MC_DIRECT_DENSITY
+    /* Placeholder: direct density prediction would read a trained density head here (e.g. a UDM
+     * populated by mc_manifold_project). No density head exists yet, so this falls through to the
+     * ideal-gas branch below. Flip MC_DIRECT_DENSITY + wire the UDM once a density head is trained. */
+#endif
+    M = C_UDMI(c, t, MC_UDM_WMEAN);
+    if (T < 1.0) T = 1.0;
+    if (M < 1.0 || M > 1000.0) M = 28.0;   /* guard against an unset/garbage UDM (e.g. before first adjust) */
+    rho = P * M / (MC_R_GAS_SI * T);
+    return (real)((rho > 1.0e-12) ? rho : 1.0e-12);
+}
+
+/* DEFINE_PROPERTY: speed of sound [m/s], ideal-gas: a = sqrt(gamma*Rsp*T), Rsp = R/M, gamma = cp/cv.
+ * Needed for density-based (compressible) solvers. Hook: Materials > ... > Speed of Sound > mc_speed_of_sound. */
+DEFINE_PROPERTY(mc_speed_of_sound, c, t)
+{
+    double T = C_T(c, t);
+    double M = C_UDMI(c, t, MC_UDM_WMEAN);
+    double cp = mc_cp_lookup(T);
+    double Rsp, cv, gamma, a;
+    if (T < 1.0) T = 1.0;
+    if (M < 1.0 || M > 1000.0) M = 28.0;
+    Rsp = MC_R_GAS_SI / M;
+    cv = cp - Rsp; if (cv < 0.1 * cp) cv = 0.1 * cp;   /* keep gamma physical if the table Cp is low */
+    gamma = cp / cv;
+    a = sqrt(gamma * Rsp * T);
+    return (real)((a > 1.0) ? a : 1.0);
+}
+
 /* Decode standardised composition to physical mass fractions with closure */
 static void mc_decode_composition(const double *z, const double *q, double *Y_out)
 {
@@ -339,6 +440,8 @@ DEFINE_ADJUST(mc_manifold_project, domain)
             mc_decode_composition(z, q, Y);
             for (i = 0; i < MC_N_DRY; ++i)
                 C_UDMI(c, t, MC_UDM_Y_START + i) = Y[i];
+            /* mean molecular weight from the decoded composition -> ideal-gas density hook */
+            C_UDMI(c, t, MC_UDM_WMEAN) = mc_mean_molecular_weight(Y);
             for (i = 0; i < MC_K; ++i)
                 C_UDMI(c, t, MC_UDM_Z_START + i) = z[i];
 
