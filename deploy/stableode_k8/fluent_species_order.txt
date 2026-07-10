@@ -1,0 +1,70 @@
+SCARFS stable-ODE — Fluent mixture species order (composition-dependent Cp, yi route)
+
+Define the fluid mixture material's constituent species in EXACTLY this 0-indexed order.
+The last species (H2O) is the bulk (Fluent computes it as 1 - sum of the rest).
+mc_manifold_project writes C_YI for indices 0..60 each iteration; species TRANSPORT EQUATIONS
+MUST be turned OFF (Solution Controls > Equations > uncheck the species) — the 8 latent UDS carry
+the chemistry. This order must match MC_EA_TO_INPUT / MC_NASA_* in merged_coil_udf.h.
+
+  0  H2
+  1  CH4
+  2  C2H6
+  3  C3H8
+  4  IC4H10
+  5  NC4H10
+  6  CO
+  7  CO2
+  8  BENZENE
+  9  TOLUENE
+ 10  XYLENES
+ 11  IP-BENZENE
+ 12  NAPHTHALENE
+ 13  ME-NAPHTHALENE
+ 14  NP-BENZENE
+ 15  _3ARO-C15
+ 16  BIPHENYL
+ 17  PHENANTHRENE
+ 18  CHD14
+ 19  NDIOL-C08
+ 20  C2H4
+ 21  C3H6
+ 22  _1.3C4H6
+ 23  _1C4H8
+ 24  _2C4H8
+ 25  IC4H8
+ 26  _1.3C5DIOL
+ 27  _1.4C5DIOL
+ 28  ISOPRENE
+ 29  _1C5H10
+ 30  _2C5H10
+ 31  _2OLE-C06
+ 32  CPTOL
+ 33  CHXOL
+ 34  CPD
+ 35  ME-CPD
+ 36  CHXDI
+ 37  ME-CHXDI
+ 38  STYRENE
+ 39  ALL-BENZENE
+ 40  AROL-C10
+ 41  AROL-C11
+ 42  ME-INDENE
+ 43  NAROL-C11
+ 44  NAROL-C12
+ 45  _1.2C4H6
+ 46  FULVENE
+ 47  C4H4
+ 48  IDIOL-C08
+ 49  CH2*CPENE
+ 50  CPD-CPD
+ 51  VI-CHXOL
+ 52  INDENE
+ 53  C2H2
+ 54  C3H4_MA
+ 55  C3H4_PD
+ 56  H.
+ 57  CH3.
+ 58  C2H5.
+ 59  C3H5.
+ 60  CPD.
+ 61  H2O

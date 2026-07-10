@@ -23,11 +23,56 @@ source, and optional transport properties. Self-contained: the model weights are
 3. Allocate **8 UDS** and enough UDMs (see `MC_TOTAL_UDM` in the `.h`), then run
    `fluent_merged_setup.tui` (File → Read → Journal) — it hooks:
    - `DEFINE_SOURCE mc_latent_uds_0..7_source` → the 8 UDS equations (`S_i = ρ·f_i(z)`),
-   - `DEFINE_ADJUST mc_manifold_project` → per-iteration latent clamp + decoded species/UDM update,
-   - `DEFINE_SOURCE mc_energy_source` → energy equation source `S_h`,
-   - `DEFINE_PROPERTY mc_viscosity`, `mc_thermal_conductivity` (optional).
-4. Set the inlet UDS values from `inlet_bc.txt`.
-5. Solve. Monitor the telemetry UDMs (OOD flag, latent-/energy-clamp counts, last `S_h`).
+   - `DEFINE_ADJUST mc_manifold_project` → per-iteration latent clamp + decoded species/UDM update (also stores mean MW),
+   - `DEFINE_SOURCE mc_energy_source` → energy equation source `S_h`.
+4. Hook the **material properties** (Materials → your mixture material → user-defined):
+   - Density → `mc_density` — **default: ideal gas** `ρ = P·M/(R·T)`, with `M` the mean molecular
+     weight computed from the decoded composition (stored in `UDM_WMEAN` by the adjust hook).
+   - Specific heat (Cp) → `mc_specific_heat` (`DEFINE_SPECIFIC_HEAT`) — **composition-dependent**:
+     `cp = Σ yᵢ·cpᵢ(T)`, `h = Σ yᵢ·(hᵢ(T)−hᵢ(Tref))` from NASA7, over the Fluent species `yᵢ`
+     (requires the species-mixture setup below — see `fluent_species_order.txt`). Set
+     `MC_CP_COMPOSITION_DEPENDENT 0` in the `.h` to fall back to the T-only table instead.
+   - Viscosity → `mc_viscosity`; Thermal conductivity → `mc_thermal_conductivity` (transport head).
+   - Speed of sound → `mc_speed_of_sound` (ideal-gas; only needed for a density-based/compressible solver).
+5. Set the inlet UDS values from `inlet_bc.txt`.
+6. Solve. Monitor the telemetry UDMs (OOD flag, latent-/energy-clamp counts, last `S_h`, mean MW).
+
+**Density switch:** the default is MW→ideal-gas. A `#define MC_DIRECT_DENSITY` placeholder exists in
+the `.h` for direct density prediction — it is **off** (no density head is trained); flip it and wire a
+UDM only once a density head exists.
+
+## ⚠️ Deployment status — read first
+
+This UDF is validated **off-Fluent only**: the model math, the standalone forward test (PASS 6/6 @1e-6),
+and the composition-Cp numerics (machine-precision vs Python) are all green, but **the full UDF has
+never been compiled with `udf.h` or run in a Fluent CFD case.** Treat the first Fluent run as
+commissioning, not production. Bring it up in stages:
+
+1. **First: `MC_CP_COMPOSITION_DEPENDENT 0`** (T-only Cp table) — needs **no species model**, the
+   simplest possible case. Get the base surrogate compiling and converging in Fluent first.
+2. **Then: composition-dependent Cp** (switch back to `1`) — this needs the species-mixture setup below,
+   which is **unverified in Fluent** (see the caveat). Validate it against the T-only run before trusting.
+
+## Composition-dependent Cp — Fluent setup (`MC_CP_COMPOSITION_DEPENDENT 1`) — UNVERIFIED IN FLUENT
+
+Verified (Ansys UDF manual): `DEFINE_SPECIFIC_HEAT` gets **no cell**, so the *only* way to vary Cp per
+cell is through the species mass fractions `yᵢ` — and `yᵢ`/`C_YI` **exist only when the Species Transport
+model is enabled.** So Cp rides on a species mixture whose composition we drive from the latent:
+
+1. **Enable the Species Transport model** (this is what allocates `C_YI`/`yᵢ` — it must be *on*, not off).
+   Fluid = a **mixture material** with species in **exactly** the order in `fluent_species_order.txt`
+   (61 energy-active species, then **H2O last as bulk**), matching `MC_EA_TO_INPUT` / `MC_NASA_*`.
+2. **De-select the species equations from the solved set** (Solution Controls → Equations → uncheck the
+   species) so they are *carried but not transported* — no extra PDEs; the 8 latent UDS carry the chemistry.
+3. `mc_manifold_project` writes the decoded composition into `C_YI` each iteration; `mc_specific_heat`
+   returns `cp = Σ yᵢ·cpᵢ(T)`, `h = Σ yᵢ·(hᵢ(T)−hᵢ(Tref))` from NASA7.
+
+**The unverified risk:** it is *not confirmed in a live Fluent run* that a hand-written `C_YI` (with the
+species equations de-selected) is reflected in `DEFINE_SPECIFIC_HEAT`'s `yᵢ` — Fluent may require the
+species to be actually solved, and enabling the species model can interact with the density hook /
+continuity. If it misbehaves, fall back to `MC_CP_COMPOSITION_DEPENDENT 0` (no species model, no risk).
+What *is* verified: the C `yᵢ`-weighted NASA7 Cp/enthalpy matches the Python reference to machine
+precision (rel-diff 0) at 900/1100/1300 K — so if `yᵢ` is populated correctly, the Cp is exact.
 
 **Transport model:** this build is the **stable latent ODE** (`#define MC_DIRECT_TRANSPORT`): the latent
 is advanced directly by `dz/dτ = sinh(ω_Z)·s_Z − β·z` (β=`MC_BETA`≈0.265), with **no E∘D re-projection**
