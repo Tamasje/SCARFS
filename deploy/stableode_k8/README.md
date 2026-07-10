@@ -23,11 +23,21 @@ source, and optional transport properties. Self-contained: the model weights are
 3. Allocate **8 UDS** and enough UDMs (see `MC_TOTAL_UDM` in the `.h`), then run
    `fluent_merged_setup.tui` (File → Read → Journal) — it hooks:
    - `DEFINE_SOURCE mc_latent_uds_0..7_source` → the 8 UDS equations (`S_i = ρ·f_i(z)`),
-   - `DEFINE_ADJUST mc_manifold_project` → per-iteration latent clamp + decoded species/UDM update,
-   - `DEFINE_SOURCE mc_energy_source` → energy equation source `S_h`,
-   - `DEFINE_PROPERTY mc_viscosity`, `mc_thermal_conductivity` (optional).
-4. Set the inlet UDS values from `inlet_bc.txt`.
-5. Solve. Monitor the telemetry UDMs (OOD flag, latent-/energy-clamp counts, last `S_h`).
+   - `DEFINE_ADJUST mc_manifold_project` → per-iteration latent clamp + decoded species/UDM update (also stores mean MW),
+   - `DEFINE_SOURCE mc_energy_source` → energy equation source `S_h`.
+4. Hook the **material properties** (Materials → your mixture material → user-defined):
+   - Density → `mc_density` — **default: ideal gas** `ρ = P·M/(R·T)`, with `M` the mean molecular
+     weight computed from the decoded composition (stored in `UDM_WMEAN` by the adjust hook).
+   - Specific heat (Cp) → `mc_specific_heat` (`DEFINE_SPECIFIC_HEAT`) — a T-only NASA7 mixture Cp(T)
+     table (the macro exposes no cell state; representative-composition compromise, as in LatentV22).
+   - Viscosity → `mc_viscosity`; Thermal conductivity → `mc_thermal_conductivity` (transport head).
+   - Speed of sound → `mc_speed_of_sound` (ideal-gas; only needed for a density-based/compressible solver).
+5. Set the inlet UDS values from `inlet_bc.txt`.
+6. Solve. Monitor the telemetry UDMs (OOD flag, latent-/energy-clamp counts, last `S_h`, mean MW).
+
+**Density switch:** the default is MW→ideal-gas. A `#define MC_DIRECT_DENSITY` placeholder exists in
+the `.h` for direct density prediction — it is **off** (no density head is trained); flip it and wire a
+UDM only once a density head exists.
 
 **Transport model:** this build is the **stable latent ODE** (`#define MC_DIRECT_TRANSPORT`): the latent
 is advanced directly by `dz/dτ = sinh(ω_Z)·s_Z − β·z` (β=`MC_BETA`≈0.265), with **no E∘D re-projection**

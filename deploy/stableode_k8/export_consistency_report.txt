@@ -1,6 +1,6 @@
 SCARFS MergedCoil — Export Consistency Report
 ================================================
-Generated: 2026-07-08 11:52:19
+Generated: 2026-07-10 15:24:26
 Bundle kind: merged
 Input species count: 212
 Energy-active species: 61
