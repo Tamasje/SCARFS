@@ -1,0 +1,24 @@
+SCARFS MergedCoil — Inlet boundary condition (folded-BC)
+Label: default_C2H6_0.7_H2O_0.3
+T [K]: 1122.8276
+P [Pa]: 250002
+H2O mass fraction: 0.300000
+
+Dry composition used for encoding:
+  C2H6: 0.70000000
+
+Encoded latent z_in (set as initial/inlet UDS values):
+  z[0] = -0.2187882324412383
+  z[1] = 0.89284327780531036
+  z[2] = -1.158003789864239
+  z[3] = -1.1020029988340114
+  z[4] = 1.6669717122428627
+  z[5] = 2.6797662778169729
+  z[6] = 0.28636266341668004
+  z[7] = -0.17499780786111019
+
+Standardised thermo q at inlet (for reference):
+  q[0] = 1.1723104039582217
+  q[1] = 0.01439779296925163
+  q[2] = -1.1073776598461711
+  q[3] = 1.1436121319943047

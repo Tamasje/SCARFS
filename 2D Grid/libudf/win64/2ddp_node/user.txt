@@ -1,0 +1,6 @@
+VERSION='2ddp_node'
+FLUENT_ARCH='win64'
+FLUENT_RELEASE='fluent22.2.0'
+CSOURCES=' $(SRC)merged_coil_udf.c'
+HSOURCES=' $(SRC)merged_coil_udf.h'
+GPU_SUPPORT='off'

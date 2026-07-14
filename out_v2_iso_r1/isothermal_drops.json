@@ -1,0 +1,1784 @@
+[
+  {
+    "worker": 6,
+    "case_id": 75,
+    "seconds": 24.75,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0081) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 88,
+    "seconds": 28.26600000000326,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 57,
+    "seconds": 30.312999999994645,
+    "error": "native PFR failed (truncated at z=0.0281 < L=352.3966) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 55,
+    "seconds": 33.04700000000594,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0005) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 45,
+    "seconds": 33.625,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 48,
+    "seconds": 34.40600000000268,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.7697) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 95,
+    "seconds": 25.765999999988708,
+    "error": "native PFR failed (truncated at z=0.0003 < L=1.5330) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 101,
+    "seconds": 27.202999999994063,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.1737) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 277,
+    "seconds": 30.0,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0129) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 294,
+    "seconds": 29.640999999988708,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.6046) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 306,
+    "seconds": 29.89100000000326,
+    "error": "native PFR failed (truncated at z=0.0001 < L=1.3904) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 319,
+    "seconds": 26.359000000011292,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.1234) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 320,
+    "seconds": 26.671999999991385,
+    "error": "native PFR failed (truncated at z=0.0512 < L=448.0877) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 333,
+    "seconds": 29.625,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0092) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 351,
+    "seconds": 28.843999999997322,
+    "error": "native PFR failed (truncated at z=0.0135 < L=35.5298) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 507,
+    "seconds": 36.85899999999674,
+    "error": "native PFR failed (truncated at z=0.0031 < L=4.1700) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 511,
+    "seconds": 55.61000000000058,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 49,
+    "seconds": 200.18799999999464,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 519,
+    "seconds": 43.25,
+    "error": "native PFR failed (truncated at z=0.0003 < L=0.5017) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 521,
+    "seconds": 30.952999999994063,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0031) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 403,
+    "seconds": 143.1409999999887,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 526,
+    "seconds": 28.139999999999418,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0045) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 538,
+    "seconds": 27.063000000009197,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0002) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 532,
+    "seconds": 31.203000000008615,
+    "error": "native PFR failed (truncated at z=0.0159 < L=81.2412) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 524,
+    "seconds": 68.375,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 551,
+    "seconds": 24.687999999994645,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.2597) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 558,
+    "seconds": 26.26600000000326,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 563,
+    "seconds": 28.328000000008615,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0272) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 564,
+    "seconds": 27.5,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0020) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 573,
+    "seconds": 32.34399999999732,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 61,
+    "seconds": 325.81299999999464,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 734,
+    "seconds": 32.78100000000268,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 739,
+    "seconds": 34.71899999999732,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 300,
+    "seconds": 379.67200000000594,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 749,
+    "seconds": 34.23400000001129,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.1418) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 756,
+    "seconds": 28.921999999991385,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0043) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 759,
+    "seconds": 35.546999999991385,
+    "error": "native PFR failed (truncated at z=0.0180 < L=47.4987) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 770,
+    "seconds": 34.71899999999732,
+    "error": "native PFR failed (truncated at z=0.0482 < L=111.6685) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 339,
+    "seconds": 438.7030000000086,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 785,
+    "seconds": 30.172000000005937,
+    "error": "native PFR failed (truncated at z=0.0056 < L=31.7207) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 792,
+    "seconds": 35.10899999999674,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0040) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 811,
+    "seconds": 31.047000000005937,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 459,
+    "seconds": 473.4689999999973,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 968,
+    "seconds": 29.90700000000652,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 975,
+    "seconds": 30.5,
+    "error": "native PFR failed (truncated at z=0.0037 < L=17.1485) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 542,
+    "seconds": 475.125,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 981,
+    "seconds": 25.985000000000582,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.3603) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 993,
+    "seconds": 27.25,
+    "error": "native PFR failed (truncated at z=0.0144 < L=298.1059) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 1007,
+    "seconds": 29.0,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0001) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 1029,
+    "seconds": 29.937999999994645,
+    "error": "native PFR failed (truncated at z=0.0228 < L=136.3875) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 582,
+    "seconds": 500.3439999999973,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 664,
+    "seconds": 504.9060000000027,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 783,
+    "seconds": 342.26600000000326,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = -378794016.9754889\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 1210,
+    "seconds": 29.218000000008033,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.2803) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 1198,
+    "seconds": 36.875,
+    "error": "native PFR failed (truncated at z=0.0002 < L=0.9527) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 878,
+    "seconds": 333.92200000000594,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 1222,
+    "seconds": 31.468999999997322,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0009) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 1072,
+    "seconds": 104.96899999999732,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 1237,
+    "seconds": 36.32799999999406,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0050) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 919,
+    "seconds": 353.43700000000536,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 1247,
+    "seconds": 40.89100000000326,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1142,
+    "seconds": 150.98399999999674,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 1301,
+    "seconds": 34.5,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0505) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 1296,
+    "seconds": 38.88999999999942,
+    "error": "native PFR failed (truncated at z=0.0004 < L=2.0660) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1302,
+    "seconds": 38.312999999994645,
+    "error": "native PFR failed (truncated at z=0.0010 < L=5.8601) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 1315,
+    "seconds": 31.985000000000582,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.2210) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1332,
+    "seconds": 29.25,
+    "error": "native PFR failed (truncated at z=0.0003 < L=4.4277) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 1335,
+    "seconds": 27.264999999999418,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1341,
+    "seconds": 25.187999999994645,
+    "error": "native PFR failed (truncated at z=0.0018 < L=28.8513) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 977,
+    "seconds": 373.73399999999674,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 1344,
+    "seconds": 76.40699999999197,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 1367,
+    "seconds": 24.921999999991385,
+    "error": "native PFR failed (truncated at z=0.0715 < L=489.1339) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 1370,
+    "seconds": 25.89100000000326,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 1523,
+    "seconds": 24.843000000008033,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 1528,
+    "seconds": 24.671999999991385,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0029) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 1225,
+    "seconds": 297.3899999999994,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = -46429.569606241195\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 1533,
+    "seconds": 27.687000000005355,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0048) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 1537,
+    "seconds": 26.156000000002678,
+    "error": "native PFR failed (truncated at z=0.0036 < L=10.6206) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 1550,
+    "seconds": 24.843999999997322,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 1555,
+    "seconds": 23.75,
+    "error": "native PFR failed (truncated at z=0.0039 < L=12.8397) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 1562,
+    "seconds": 23.98399999999674,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.5705) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 1573,
+    "seconds": 26.156999999991967,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0055) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 1295,
+    "seconds": 344.89100000000326,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 1595,
+    "seconds": 24.952999999994063,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0079) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1357,
+    "seconds": 249.13999999999942,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 1600,
+    "seconds": 24.75,
+    "error": "native PFR failed (truncated at z=0.0288 < L=131.8821) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1757,
+    "seconds": 23.0,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0001) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 1585,
+    "seconds": 99.57800000000861,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 1243,
+    "seconds": 430.45299999999406,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 1758,
+    "seconds": 24.968999999997322,
+    "error": "native PFR failed (truncated at z=0.0072 < L=31.1691) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 1529,
+    "seconds": 193.56299999999464,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1764,
+    "seconds": 23.469000000011874,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 1587,
+    "seconds": 120.86000000000058,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 1787,
+    "seconds": 25.593999999997322,
+    "error": "native PFR failed (truncated at z=0.0007 < L=3.1511) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 1790,
+    "seconds": 25.25,
+    "error": "native PFR failed (truncated at z=0.0004 < L=0.5216) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1792,
+    "seconds": 27.98399999999674,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 1798,
+    "seconds": 24.5,
+    "error": "native PFR failed (truncated at z=0.0023 < L=13.4185) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1804,
+    "seconds": 26.906999999991967,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 1810,
+    "seconds": 24.859000000011292,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0003) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1817,
+    "seconds": 26.609000000011292,
+    "error": "native PFR failed (truncated at z=0.0336 < L=242.9537) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 1452,
+    "seconds": 315.04700000000594,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 1797,
+    "seconds": 82.57800000000861,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1831,
+    "seconds": 27.718999999997322,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 1778,
+    "seconds": 201.0630000000092,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 1051,
+    "seconds": 773.4070000000065,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = -573783.9381579014\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 1983,
+    "seconds": 27.531000000002678,
+    "error": "native PFR failed (truncated at z=0.0001 < L=1.5002) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 1993,
+    "seconds": 29.921999999991385,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 1776,
+    "seconds": 279.1719999999914,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2015,
+    "seconds": 28.047000000005937,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0009) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 2026,
+    "seconds": 31.375,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0003) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 2036,
+    "seconds": 30.375,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 2051,
+    "seconds": 32.20299999999406,
+    "error": "native PFR failed (truncated at z=0.0209 < L=59.7857) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 1803,
+    "seconds": 335.3280000000086,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2056,
+    "seconds": 39.95299999999406,
+    "error": "native PFR failed (truncated at z=0.0001 < L=1.6870) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2037,
+    "seconds": 144.14100000000326,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2058,
+    "seconds": 36.90600000000268,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.1024) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2221,
+    "seconds": 32.84399999999732,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.9754) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 1830,
+    "seconds": 404.75,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = -41593200556.3847\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2222,
+    "seconds": 31.39100000000326,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 1912,
+    "seconds": 383.7039999999979,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2228,
+    "seconds": 32.921999999991385,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.2910) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 2244,
+    "seconds": 32.125,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2247,
+    "seconds": 32.35899999999674,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0457) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 2264,
+    "seconds": 30.781000000002678,
+    "error": "native PFR failed (truncated at z=0.0001 < L=1.2986) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2279,
+    "seconds": 30.453000000008615,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 2280,
+    "seconds": 32.89099999998871,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 2114,
+    "seconds": 121.92199999999139,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2289,
+    "seconds": 29.093999999997322,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0015) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 1968,
+    "seconds": 384.875,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = -1167173008.074228\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 1898,
+    "seconds": 494.45299999999406,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 2049,
+    "seconds": 378.5,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 2285,
+    "seconds": 358.35899999999674,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 2295,
+    "seconds": 387.93700000000536,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2324,
+    "seconds": 366.81299999999464,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2281,
+    "seconds": 505.25,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 2351,
+    "seconds": 166.0,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 2447,
+    "seconds": 30.078000000008615,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0001) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 2460,
+    "seconds": 30.485000000000582,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0269) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 2464,
+    "seconds": 28.014999999999418,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0213) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 2469,
+    "seconds": 31.985000000000582,
+    "error": "native PFR failed (truncated at z=0.0250 < L=61.3714) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 2471,
+    "seconds": 29.125,
+    "error": "native PFR failed (truncated at z=0.0018 < L=12.0304) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 2480,
+    "seconds": 29.89100000000326,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 2488,
+    "seconds": 36.67200000000594,
+    "error": "native PFR failed (truncated at z=0.0177 < L=48.2509) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2487,
+    "seconds": 119.34400000001187,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 2458,
+    "seconds": 354.75,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 2491,
+    "seconds": 197.4539999999979,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2545,
+    "seconds": 26.937000000005355,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 2548,
+    "seconds": 28.171999999991385,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0013) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 2557,
+    "seconds": 27.453000000008615,
+    "error": "native PFR failed (truncated at z=0.0014 < L=15.9621) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 2575,
+    "seconds": 31.312000000005355,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.3186) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2576,
+    "seconds": 29.686999999990803,
+    "error": "native PFR failed (truncated at z=0.0004 < L=0.7402) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 2586,
+    "seconds": 27.797000000005937,
+    "error": "native PFR failed (truncated at z=0.0470 < L=124.3019) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 2608,
+    "seconds": 32.23500000000058,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2618,
+    "seconds": 29.093999999997322,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0007) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2653,
+    "seconds": 67.1710000000021,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 2614,
+    "seconds": 358.7810000000027,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 2678,
+    "seconds": 358.2659999999887,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 2739,
+    "seconds": 14.14100000000326,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2730,
+    "seconds": 82.57800000000861,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 2758,
+    "seconds": 111.07800000000861,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2787,
+    "seconds": 27.672000000005937,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 2794,
+    "seconds": 34.812999999994645,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0877) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 2796,
+    "seconds": 29.687000000005355,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2797,
+    "seconds": 73.88999999999942,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2809,
+    "seconds": 26.812000000005355,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.3390) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 2819,
+    "seconds": 26.437999999994645,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0143) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 2811,
+    "seconds": 141.03100000000268,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2829,
+    "seconds": 28.952999999994063,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0026) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 2834,
+    "seconds": 29.09299999999348,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0003) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2849,
+    "seconds": 30.812000000005355,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0174) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 2824,
+    "seconds": 302.2039999999979,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 2815,
+    "seconds": 371.5789999999979,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 2846,
+    "seconds": 361.3439999999973,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 2888,
+    "seconds": 339.125,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 3011,
+    "seconds": 34.10899999999674,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0001) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 3022,
+    "seconds": 29.078000000008615,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 3021,
+    "seconds": 33.53200000000652,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.2932) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 3038,
+    "seconds": 25.375,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 3041,
+    "seconds": 33.48399999999674,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0961) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 3051,
+    "seconds": 37.11000000000058,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0003) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 3007,
+    "seconds": 358.42200000000594,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 3063,
+    "seconds": 31.297000000005937,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.3428) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 3081,
+    "seconds": 47.51499999999942,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.1386) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 3060,
+    "seconds": 504.6100000000006,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3093,
+    "seconds": 289.7960000000021,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 3143,
+    "seconds": 121.75,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 3116,
+    "seconds": 593.6880000000092,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 3239,
+    "seconds": 49.39100000000326,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 3246,
+    "seconds": 46.04700000000594,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0003) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 3252,
+    "seconds": 49.98399999999674,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0857) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 3273,
+    "seconds": 46.062999999994645,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 3292,
+    "seconds": 57.14100000000326,
+    "error": "native PFR failed (truncated at z=0.0008 < L=2.1575) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 3250,
+    "seconds": 654.1559999999881,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 3305,
+    "seconds": 49.11000000000058,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.4884) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 3278,
+    "seconds": 614.3429999999935,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3414,
+    "seconds": 74.81200000000536,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3461,
+    "seconds": 31.672000000005937,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0006) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 3475,
+    "seconds": 30.875,
+    "error": "native PFR failed (truncated at z=0.0006 < L=6.8147) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 3481,
+    "seconds": 34.655999999988126,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0718) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3487,
+    "seconds": 37.578000000008615,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3493,
+    "seconds": 37.65699999999197,
+    "error": "native PFR failed (truncated at z=0.0363 < L=145.0809) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3507,
+    "seconds": 37.98500000000058,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 3510,
+    "seconds": 32.578999999997905,
+    "error": "native PFR failed (truncated at z=0.0044 < L=22.5430) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 3514,
+    "seconds": 38.70299999999406,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 3520,
+    "seconds": 37.54700000000594,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0025) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 3523,
+    "seconds": 29.921999999991385,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 3505,
+    "seconds": 213.04699999999139,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3526,
+    "seconds": 39.34399999999732,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 3528,
+    "seconds": 36.812999999994645,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 3535,
+    "seconds": 40.875,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0012) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 3524,
+    "seconds": 225.31299999999464,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 3554,
+    "seconds": 107.18799999999464,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3577,
+    "seconds": 79.26600000000326,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 3598,
+    "seconds": 39.15700000000652,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3693,
+    "seconds": 32.0619999999908,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 3697,
+    "seconds": 30.797000000005937,
+    "error": "native PFR failed (truncated at z=0.0037 < L=15.4900) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 3704,
+    "seconds": 32.35899999999674,
+    "error": "native PFR failed (truncated at z=0.0004 < L=6.8611) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 3639,
+    "seconds": 325.125,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 3710,
+    "seconds": 35.03200000000652,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0200) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 3715,
+    "seconds": 54.546000000002095,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 3728,
+    "seconds": 37.625,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.3134) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 3731,
+    "seconds": 37.828000000008615,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 3716,
+    "seconds": 225.07799999999406,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 3774,
+    "seconds": 36.312000000005355,
+    "error": "native PFR failed (truncated at z=0.0007 < L=0.8898) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 3796,
+    "seconds": 27.937999999994645,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.3576) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 3822,
+    "seconds": 31.047000000005937,
+    "error": "native PFR failed (truncated at z=0.0026 < L=16.5962) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 3842,
+    "seconds": 33.578999999997905,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 3847,
+    "seconds": 34.88999999999942,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0001) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 3795,
+    "seconds": 437.6409999999887,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3864,
+    "seconds": 40.296999999991385,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 3857,
+    "seconds": 429.0929999999935,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 3952,
+    "seconds": 124.0460000000021,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 3890,
+    "seconds": 462.875,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 3978,
+    "seconds": 154.20299999999406,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4043,
+    "seconds": 30.0,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 4050,
+    "seconds": 33.26599999998871,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0001) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4066,
+    "seconds": 30.71799999999348,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0019) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 4033,
+    "seconds": 421.14100000000326,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 4073,
+    "seconds": 33.96899999999732,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 4040,
+    "seconds": 401.54700000000594,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4077,
+    "seconds": 36.812000000005355,
+    "error": "native PFR failed (truncated at z=0.0009 < L=1.5611) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 4080,
+    "seconds": 36.125,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 4083,
+    "seconds": 37.20299999999406,
+    "error": "native PFR failed (truncated at z=0.0038 < L=25.3085) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 4093,
+    "seconds": 37.812000000005355,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.9348) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 4106,
+    "seconds": 349.2340000000113,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4099,
+    "seconds": 416.9690000000119,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4174,
+    "seconds": 128.04699999999139,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 4128,
+    "seconds": 474.6560000000027,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4225,
+    "seconds": 69.42200000000594,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 4264,
+    "seconds": 74.15699999999197,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4287,
+    "seconds": 34.171999999991385,
+    "error": "native PFR failed (truncated at z=0.0154 < L=71.6830) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4292,
+    "seconds": 33.953000000008615,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 4297,
+    "seconds": 32.53199999999197,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0001) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4301,
+    "seconds": 32.10900000001129,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0326) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 4317,
+    "seconds": 33.59399999999732,
+    "error": "native PFR failed (truncated at z=0.0065 < L=28.1490) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 4303,
+    "seconds": 304.25,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 4352,
+    "seconds": 141.09399999999732,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 4334,
+    "seconds": 384.4219999999914,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = -116748.7246373688\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 4348,
+    "seconds": 373.95299999999406,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4410,
+    "seconds": 29.078000000008615,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 4483,
+    "seconds": 34.046999999991385,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.3701) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 4482,
+    "seconds": 112.07800000000861,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4498,
+    "seconds": 31.75,
+    "error": "native PFR failed (truncated at z=0.0001 < L=0.1174) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4491,
+    "seconds": 99.73400000001129,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4505,
+    "seconds": 34.655999999988126,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.1669) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 4506,
+    "seconds": 37.0,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0001) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 4524,
+    "seconds": 30.296999999991385,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0244) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4536,
+    "seconds": 35.0,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0011) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 4531,
+    "seconds": 108.45299999999406,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4546,
+    "seconds": 33.25,
+    "error": "native PFR failed (truncated at z=0.0027 < L=23.5941) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4551,
+    "seconds": 34.421999999991385,
+    "error": "native PFR failed (truncated at z=0.0004 < L=2.9756) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4555,
+    "seconds": 31.313000000009197,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 4,
+    "case_id": 4558,
+    "seconds": 32.312000000005355,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.2010) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 4513,
+    "seconds": 402.9840000000113,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = -122669041.51342064\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 4549,
+    "seconds": 450.43799999999464,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 4634,
+    "seconds": 173.40600000000268,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 4712,
+    "seconds": 28.73399999999674,
+    "error": "native PFR failed (truncated at z=0.0060 < L=12.0550) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4727,
+    "seconds": 32.20299999999406,
+    "error": "native PFR failed (truncated at z=0.0038 < L=31.6745) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 4732,
+    "seconds": 29.297000000005937,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0001) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4741,
+    "seconds": 30.797000000005937,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.1780) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 4744,
+    "seconds": 30.327999999994063,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0001) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 4759,
+    "seconds": 28.312000000005355,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0018) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 4711,
+    "seconds": 419.2659999999887,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 4775,
+    "seconds": 32.21899999999732,
+    "error": "native PFR failed (truncated at z=0.0019 < L=4.8875) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 4781,
+    "seconds": 129.9210000000021,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 4806,
+    "seconds": 110.48399999999674,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4795,
+    "seconds": 353.93799999999464,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = nan\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 4869,
+    "seconds": 113.46899999999732,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 1,
+    "case_id": 4921,
+    "seconds": 164.9380000000092,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 4944,
+    "seconds": 62.375,
+    "error": "native PFR failed (truncated at z=0.0239 < L=142.8874) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 4956,
+    "seconds": 39.60899999999674,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0066) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 2,
+    "case_id": 4957,
+    "seconds": 46.96899999999732,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0006) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 7,
+    "case_id": 4964,
+    "seconds": 44.0619999999908,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 3,
+    "case_id": 4983,
+    "seconds": 43.530999999988126,
+    "error": "native PFR failed (truncated at z=0.0000 < L=0.0000) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 5,
+    "case_id": 4998,
+    "seconds": 65.375,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 0,
+    "case_id": 4954,
+    "seconds": 560.9839999999967,
+    "error": "native PFR failed (exception: \n*******************************************************************************\nCanteraError thrown by Phase::setTemperature:\ntemperature must be positive. T = -800721.9569801023\n*******************************************************************************\n) and no suitable real-Y fallback anchor was available"
+  },
+  {
+    "worker": 6,
+    "case_id": 4987,
+    "seconds": 358.39100000000326,
+    "error": "native PFR failed (T exceeded cap 1600.0 K) and no suitable real-Y fallback anchor was available"
+  }
+]

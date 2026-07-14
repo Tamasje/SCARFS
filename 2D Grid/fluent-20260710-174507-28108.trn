@@ -1,0 +1,778 @@
+Auto-Transcript Start Time:  17:45:07, 10 Jul 2026 Romance Daylight Time 
+Current Directory: "C:\Users\mbonheur\OneDrive - UGent\Documenten\GitHub\SCARFS\2D Grid"
+
+              Welcome to ANSYS Fluent 2022 R2
+
+              Copyright 1987-2022 ANSYS, Inc. All Rights Reserved.
+              Unauthorized use, distribution or duplication is prohibited.
+              This product is subject to U.S. laws governing export and re-export.
+              For full Legal Notice, see documentation.
+
+Build Time: Nov 10 2022 18:43:09 EDT  Build Id: 10213  
+ 
+Connected License Server List:	1055@ir03lic1.ugent.be
+
+     --------------------------------------------------------------
+     This is an academic version of ANSYS FLUENT. Usage of this product
+     license is limited to the terms and conditions specified in your ANSYS
+     license form, additional terms section.
+     --------------------------------------------------------------
+Host spawning Node 0 on machine "UG-17CB353" (win64).
+
+-------------------------------------------------------------------------------
+ID    Hostname    Core  O.S.         PID    Vendor                          
+-------------------------------------------------------------------------------
+n5    UG-17CB353  6/12  Windows-x64  30940  Intel(R) Core(TM) i7-9850H      
+n4    UG-17CB353  5/12  Windows-x64  17356  Intel(R) Core(TM) i7-9850H      
+n3    UG-17CB353  4/12  Windows-x64  3860   Intel(R) Core(TM) i7-9850H      
+n2    UG-17CB353  3/12  Windows-x64  22928  Intel(R) Core(TM) i7-9850H      
+n1    UG-17CB353  2/12  Windows-x64  19956  Intel(R) Core(TM) i7-9850H      
+n0*   UG-17CB353  1/12  Windows-x64  20524  Intel(R) Core(TM) i7-9850H      
+host  UG-17CB353        Windows-x64  31032  Intel(R) Core(TM) i7-9850H      
+
+MPI Option Selected: intel
+Selected system interconnect: default
+-------------------------------------------------------------------------------
+
+Cleanup script file is C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\cleanup-fluent-UG-17CB353-31032.bat
+
+> (cx-gui-do cx-activate-item "MenuBar*ReadSubMenu*Case...")
+(cx-gui-do cx-set-file-dialog-entries "Select File" '( "2DGrid_D-0d09m_L-5m.cas") "All Case Files (*.cas* *.msh* *.MSH* )")
+
+UG-17CB353 is already loaded (53.9303).                       Process affinity not being set.
+Reading "C:/Users/mbonheur/OneDrive - UGent/Documenten/GitHub/SCARFS/2D Grid/2DGrid_D-0d09m_L-5m.cas"...
+Buffering for file scan...
+
+   10000 nodes.
+    9711 quadrilateral cells, zone  2.
+   19134 2D interior faces, zone  3.
+      39 2D pressure-inlet faces, zone  4.
+      39 2D pressure-outlet faces, zone  5.
+     498 2D wall faces, zone  6.
+
+Building...
+     mesh
+	auto partitioning mesh by Metis (fast),
+	distributing mesh
+		parts......,
+		faces......,
+		nodes......,
+		cells......,
+        bandwidth reduction using Reverse Cuthill-McKee: 39/43 = 0.906977
+Info: The mesh contains elements that are invalid or of poor quality.
+
+      A different numerical scheme will be applied to these elements,
+      which may affect the quality of the solution. It is recommended
+      that you consider removing the invalid and poor quality elements
+      in the mesh.
+
+      For more information on the invalid and poor quality elements,
+      please use the following TUI commands:
+
+      /mesh/check
+      /mesh/repair-improve/report-poor-elements.
+WARNING: 9711 cells with non-positive volume detected.
+     materials,
+     interface,
+     domains,
+     zones,
+	wall
+	outlet
+	inlet
+	interior-unspecified
+	unspecified
+     parallel,
+The automatic selection for flux type has changed to Rhie-Chow: momentum based.
+
+Done.
+(cx-gui-do cx-activate-item "Information*OK")
+(cx-use-window-id 51)
+(handle-key "f15")
+(cx-use-window-id 51)
+(handle-key "f15")
+
+adjoint/                parallel/               server/
+define/                 parametric-study/       solve/
+display/                plot/                   surface/
+exit                    preferences/            views/
+file/                   print-license-usage
+mesh/                   report/
+
+> (cx-gui-do cx-activate-item "Ribbon*Frame1*Frame4(User-Defined)*Table1*Table3(User Defined)*PushButton1(Functions)")
+(cx-gui-do cx-activate-item "MenuBar*PopupMenuFunctions*Compiled...")
+(cx-gui-do cx-activate-item "Compiled UDFs*Table1*Frame1*Frame2*PushButton1( Add)")
+(cx-gui-do cx-set-file-dialog-entries "Select File" '( "merged_coil_udf.c") "Source Files (*.c *.cpp )")
+(cx-gui-do cx-activate-item "Compiled UDFs*Table1*Frame2*Frame2*PushButton1( Add)")
+(cx-gui-do cx-set-file-dialog-entries "Select File" '( "merged_coil_udf.h") "Header Files (*.h)")
+(cx-gui-do cx-set-list-selections "Compiled UDFs*Table1*Frame2*List1(Header Files)" '( 0))
+(cx-gui-do cx-activate-item "Compiled UDFs*Table1*Frame2*List1(Header Files)")
+(cx-gui-do cx-set-list-selections "Compiled UDFs*Table1*Frame1*List1(Source Files)" '( 0))
+(cx-gui-do cx-activate-item "Compiled UDFs*Table1*Frame1*List1(Source Files)")
+(cx-gui-do cx-activate-item "Compiled UDFs*Frame8*PushButton2(Build)")
+(cx-gui-do cx-activate-item "Question*OK")
+Copied C:\Users\mbonheur\OneDrive - UGent\Documenten\GitHub\SCARFS\2D Grid/C:\Users\mbonheur\OneDrive - UGent\Documenten\GitHub\SCARFS\2D Grid\merged_coil_udf.c to libudf\\src
+Copied C:\Users\mbonheur\OneDrive - UGent\Documenten\GitHub\SCARFS\2D Grid/C:\Users\mbonheur\OneDrive - UGent\Documenten\GitHub\SCARFS\2D Grid\merged_coil_udf.h to libudf\\src
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\sconstruct.udf "libudf\\win64\2ddp_host\SConstruct" ")
+        1 file(s) copied.
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\scons_default.bat "libudf\\win64\2ddp_host\scons_test.bat" ")
+        1 file(s) copied.
+Creating user_nt.udf file for 2ddp_host ...
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\makefile_nt.udf "libudf\\win64\2ddp_host\makefile" ")
+        1 file(s) copied.
+(chdir "libudf")(chdir "win64\\2ddp_host")
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_host>rem  
+
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_host>rem  Copyright 1987-2022 ANSYS, Inc. All Rights Reserved. 
+
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_host>rem  
+Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30157 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+usage: cl [ option... ] filename... [ /link linkoption... ]
+
+Microsoft (R) Program Maintenance Utility Version 14.29.30157.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+# Generating ud_io1.h
+Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30157 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+cl : Command line warning D9024 : unrecognized source file type '..\\..\\src\\merged_coil_udf.h', object file assumed
+cl : Command line warning D9027 : source file '..\\..\\src\\merged_coil_udf.h' ignored
+merged_coil_udf.c
+# Generating udf_names.c because of makefile merged_coil_udf.obj
+Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30157 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+cl : Command line warning D9024 : unrecognized source file type '..\\..\\src\\merged_coil_udf.h', object file assumed
+cl : Command line warning D9027 : source file '..\\..\\src\\merged_coil_udf.h' ignored
+udf_names.c
+# Linking libudf.dll because of makefile user_nt.udf udf_names.obj merged_coil_udf.obj
+Microsoft (R) Incremental Linker Version 14.29.30157.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+   Creating library libudf.lib and object libudf.exp
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\sconstruct.udf "libudf\\win64\2ddp_node\SConstruct" ")
+        1 file(s) copied.
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\scons_default.bat "libudf\\win64\2ddp_node\scons_test.bat" ")
+        1 file(s) copied.
+Creating user_nt.udf file for 2ddp_node ...
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\makefile_nt.udf "libudf\\win64\2ddp_node\makefile" ")
+        1 file(s) copied.
+(chdir "libudf")(chdir "win64\\2ddp_node")
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_node>rem  
+
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_node>rem  Copyright 1987-2022 ANSYS, Inc. All Rights Reserved. 
+
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_node>rem  
+Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30157 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+usage: cl [ option... ] filename... [ /link linkoption... ]
+
+Microsoft (R) Program Maintenance Utility Version 14.29.30157.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+# Generating ud_io1.h
+Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30157 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+cl : Command line warning D9024 : unrecognized source file type '..\\..\\src\\merged_coil_udf.h', object file assumed
+cl : Command line warning D9027 : source file '..\\..\\src\\merged_coil_udf.h' ignored
+merged_coil_udf.c
+# Generating udf_names.c because of makefile merged_coil_udf.obj
+Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30157 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+cl : Command line warning D9024 : unrecognized source file type '..\\..\\src\\merged_coil_udf.h', object file assumed
+cl : Command line warning D9027 : source file '..\\..\\src\\merged_coil_udf.h' ignored
+udf_names.c
+# Linking libudf.dll because of makefile user_nt.udf udf_names.obj merged_coil_udf.obj
+Microsoft (R) Incremental Linker Version 14.29.30157.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+   Creating library libudf.lib and object libudf.exp
+
+Done.
+(cx-gui-do cx-activate-item "Compiled UDFs*PanelButtons*PushButton1(OK)")
+
+UG-17CB353: Opening library "C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf"...Done.
+
+UG-17CB353: Opening library "C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf"...
+	mc_specific_heat
+	mc_density
+	mc_speed_of_sound
+	mc_manifold_project
+	mc_energy_source
+	mc_viscosity
+	mc_thermal_conductivity
+	mc_latent_uds_0_source
+	mc_latent_uds_1_source
+	mc_latent_uds_2_source
+	mc_latent_uds_3_source
+	mc_latent_uds_4_source
+	mc_latent_uds_5_source
+	mc_latent_uds_6_source
+	mc_latent_uds_7_source
+Done.
+(cx-gui-do cx-set-toggle-button2 "Ribbon*Frame1*Frame3(Physics)*Table1*Table3(Models)*CheckButton1(Energy)" #t)
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame3(Physics)*Table1*Table3(Models)*CheckButton1(Energy)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame3(Physics)*Table1*Table3(Models)*PushButton4(Viscous)")
+(cx-gui-do cx-set-toggle-button2 "Viscous Model*Table1*ToggleBox1(Model)*Spalart-Allmaras (1 eqn)" #t)
+(cx-gui-do cx-activate-item "Viscous Model*Table1*ToggleBox1(Model)*Spalart-Allmaras (1 eqn)")
+(cx-gui-do cx-set-toggle-button2 "Viscous Model*Table1*ToggleBox5(Spalart-Allmaras Production)*Strain/Vorticity-Based" #t)
+(cx-gui-do cx-activate-item "Viscous Model*Table1*ToggleBox5(Spalart-Allmaras Production)*Strain/Vorticity-Based")
+(cx-gui-do cx-activate-item "Viscous Model*PanelButtons*PushButton1(OK)")
+
+adjoint/                parallel/               server/
+define/                 parametric-study/       solve/
+display/                plot/                   surface/
+exit                    preferences/            views/
+file/                   print-license-usage
+mesh/                   report/
+
+> (cx-gui-do cx-activate-item "Ribbon*Frame1*Frame3(Physics)*Table1*Table3(Solver)*PushButton2(Operating Conditions)")
+(cx-gui-do cx-set-expression-entry "Operating Conditions*Frame1*Table1(Pressure)*ExpressionEntry2(Operating Pressure)" '("0" . 0))
+(cx-gui-do cx-activate-item "Operating Conditions*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Inlet|inlet (pressure-inlet, id=4)"))
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Inlet|inlet (pressure-inlet, id=4)"))
+(cx-gui-do cx-activate-item "NavigationPane*Frame2*Table1*List_Tree2")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Inlet|inlet (pressure-inlet, id=4)"))
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 1)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 2)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 3)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 4)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 5)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 6)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 7)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 8)
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-enable-apply-button "Pressure Inlet")
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame1(Momentum)*Table1*Table6*ExpressionEntry1(Gauge Total Pressure)" '("210000" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame1(Momentum)*Table1*Table7*ExpressionEntry1(Supersonic/Initial Gauge Pressure)" '("2000" . 0))
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 1)
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame2(Thermal)*Table1*Table1*ExpressionEntry1(Total Temperature)" '("650" . 0))
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-item "Pressure Inlet*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Pressure Inlet*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Outlet|outlet (pressure-outlet, id=5)"))
+(cx-gui-do cx-list-tree-right-click "NavigationPane*Frame2*Table1*List_Tree2" )
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Outlet|outlet (pressure-outlet, id=5)"))
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Outlet|outlet (pressure-outlet, id=5)"))
+(cx-gui-do cx-activate-item "NavigationPane*Frame2*Table1*List_Tree2")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Outlet|outlet (pressure-outlet, id=5)"))
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 1)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 2)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 3)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 4)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 5)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 6)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 7)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 8)
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 0)
+(cx-gui-do cx-enable-apply-button "Pressure Outlet")
+(cx-gui-do cx-set-expression-entry "Pressure Outlet*Frame2*Frame2*Frame1(Momentum)*Table1*Table7*ExpressionEntry1(Gauge Pressure)" '("190000" . 0))
+(cx-gui-do cx-set-toggle-button2 "Pressure Outlet*Frame2*Frame2*Frame1(Momentum)*Table1*CheckButton18(Average Pressure Specification)" #t)
+(cx-gui-do cx-activate-item "Pressure Outlet*Frame2*Frame2*Frame1(Momentum)*Table1*CheckButton18(Average Pressure Specification)")
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 1)
+(cx-gui-do cx-set-expression-entry "Pressure Outlet*Frame2*Frame2*Frame2(Thermal)*Table1*Table1*ExpressionEntry1(Backflow Total Temperature)" '("300" . 0))
+(cx-gui-do cx-activate-tab-index "Pressure Outlet*Frame2*Frame2" 0)
+(cx-gui-do cx-set-toggle-button2 "Pressure Outlet*Frame2*Frame2*Frame1(Momentum)*Table1*CheckButton16(Prevent Reverse Flow)" #t)
+(cx-gui-do cx-activate-item "Pressure Outlet*Frame2*Frame2*Frame1(Momentum)*Table1*CheckButton16(Prevent Reverse Flow)")
+(cx-gui-do cx-activate-item "Pressure Outlet*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Pressure Outlet*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Wall|wall (wall, id=6)"))
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Wall|wall (wall, id=6)"))
+(cx-gui-do cx-activate-item "NavigationPane*Frame2*Table1*List_Tree2")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Wall|wall (wall, id=6)"))
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 1)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 2)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 3)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 4)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 5)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 6)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 7)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 8)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 9)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 10)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 1)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 2)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 3)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 4)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 0)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 5)
+(cx-gui-do cx-activate-tab-index "Wall*Frame4*Frame8(Wall Film)*Frame1*Frame2" 0)
+(cx-gui-do cx-activate-item "Wall*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Wall"))
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Wall|wall (wall, id=6)"))
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Wall|wall (wall, id=6)"))
+(cx-gui-do cx-activate-item "NavigationPane*Frame2*Table1*List_Tree2")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Wall|wall (wall, id=6)"))
+(cx-gui-do cx-activate-tab-index "Wall*Frame4" 1)
+(cx-gui-do cx-enable-apply-button "Wall")
+(cx-gui-do cx-set-expression-entry "Wall*Frame4*Frame2(Thermal)*Frame1*Frame1(Thermal Conditions)*Table3*Table1*Table2*ExpressionEntry1(Heat Flux)" '("100000" . 0))
+(cx-gui-do cx-activate-item "Wall*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Wall*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Materials|Fluid|air"))
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Materials|Fluid|air"))
+(cx-gui-do cx-activate-item "NavigationPane*Frame2*Table1*List_Tree2")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Materials|Fluid|air"))
+(cx-gui-do cx-set-list-selections "Create/Edit Materials*Table2*Table1(Properties)*DropDownList4(Density)" '( 15))
+(cx-gui-do cx-activate-item "Create/Edit Materials*Table2*Table1(Properties)*DropDownList4(Density)")
+(cx-gui-do cx-activate-item "User-Defined Functions*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-set-list-selections "Create/Edit Materials*Table2*Table1(Properties)*DropDownList5(Cp (Specific Heat))" '( 5))
+(cx-gui-do cx-activate-item "Create/Edit Materials*Table2*Table1(Properties)*DropDownList5(Cp (Specific Heat))")
+(cx-gui-do cx-activate-item "User-Defined Functions*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-set-list-selections "Create/Edit Materials*Table2*Table1(Properties)*DropDownList6(Thermal Conductivity)" '( 6))
+(cx-gui-do cx-activate-item "Create/Edit Materials*Table2*Table1(Properties)*DropDownList6(Thermal Conductivity)")
+(cx-gui-do cx-set-list-selections "User-Defined Functions*List1" '( 3))
+(cx-gui-do cx-activate-item "User-Defined Functions*List1")
+(cx-gui-do cx-activate-item "User-Defined Functions*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-set-list-selections "Create/Edit Materials*Table2*Table1(Properties)*DropDownList7(Viscosity)" '( 8))
+(cx-gui-do cx-activate-item "Create/Edit Materials*Table2*Table1(Properties)*DropDownList7(Viscosity)")
+(cx-gui-do cx-activate-item "User-Defined Functions*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-set-list-selections "Create/Edit Materials*Table2*Table1(Properties)*DropDownList7(Viscosity)" '( 8))
+(cx-gui-do cx-activate-item "Create/Edit Materials*Table2*Table1(Properties)*DropDownList7(Viscosity)")
+(cx-gui-do cx-set-list-selections "User-Defined Functions*List1" '( 2))
+(cx-gui-do cx-activate-item "User-Defined Functions*List1")
+(cx-gui-do cx-activate-item "User-Defined Functions*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-set-list-selections "Create/Edit Materials*Table2*Table1(Properties)*DropDownList75(Speed of Sound)" '( 5))
+(cx-gui-do cx-activate-item "Create/Edit Materials*Table2*Table1(Properties)*DropDownList75(Speed of Sound)")
+(cx-gui-do cx-set-list-selections "User-Defined Functions*List1" '( 1))
+(cx-gui-do cx-activate-item "User-Defined Functions*List1")
+(cx-gui-do cx-activate-item "User-Defined Functions*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Create/Edit Materials*PanelButtons*PushButton3(Change/Create)")
+(cx-gui-do cx-activate-item "Create/Edit Materials*PanelButtons*PushButton3(Change/Create)")
+(cx-gui-do cx-activate-item "Create/Edit Materials*PanelButtons*PushButton1(Close)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame4(User-Defined)*Table1*Table3(User Defined)*PushButton1(Functions)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame4(User-Defined)*Table1*Table3(User Defined)*PushButton3(Function Hooks)")
+(cx-gui-do cx-activate-item "User-Defined Function Hooks*Table1*PushButton5(Edit)")
+(cx-gui-do cx-set-list-selections "Adjust Functions*Table1*List1(Available Adjust Functions)" '( 0))
+(cx-gui-do cx-activate-item "Adjust Functions*Table1*List1(Available Adjust Functions)")
+(cx-gui-do cx-activate-item "Adjust Functions*Table1*Table3*PushButton1(Add)")
+(cx-gui-do cx-activate-item "Adjust Functions*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "User-Defined Function Hooks*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame4(User-Defined)*Table1*Table3(User Defined)*PushButton5(Memory)")
+(cx-gui-do cx-set-integer-entry "User-Defined Memory*Table1*IntegerEntry2" 100)
+(cx-gui-do cx-activate-item "User-Defined Memory*Table1*IntegerEntry2")
+(cx-gui-do cx-activate-item "User-Defined Memory*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame4(User-Defined)*Table1*Table3(User Defined)*PushButton4(Execute on Demand)")
+(cx-gui-do cx-activate-item "Execute on Demand*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame4(User-Defined)*Table1*Table3(User Defined)*PushButton6(Scalars)")
+(cx-gui-do cx-set-integer-entry "User-Defined Scalars*Table1*IntegerEntry1(Number of User-Defined Scalars)" 8)
+(cx-gui-do cx-activate-item "User-Defined Scalars*Table1*IntegerEntry1(Number of User-Defined Scalars)")
+(cx-gui-do cx-activate-item "User-Defined Scalars*PanelButtons*PushButton1(OK)")
+
+Material air:
+  New property "UDS Diffusivity" has been added.
+  Selecting defined-per-uds method for "UDS Diffusivity" -- data required.
+
+
+Available material properties or methods have changed.
+Please confirm the property values before continuing.
+
+(cx-gui-do cx-activate-item "Information*OK")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Cell Zone Conditions|Fluid"))
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Cell Zone Conditions|Fluid"))
+(cx-gui-do cx-activate-item "NavigationPane*Frame2*Table1*List_Tree2")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Cell Zone Conditions|Fluid"))
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 1)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 2)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 2)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 3)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 4)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 5)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 6)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 7)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 8)
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 0)
+(cx-gui-do cx-enable-apply-button "Fluid")
+(cx-gui-do cx-set-toggle-button2 "Fluid*Frame2*Table2*CheckButton6(Source Terms)" #t)
+(cx-gui-do cx-activate-item "Fluid*Frame2*Table2*CheckButton6(Source Terms)")
+(cx-gui-do cx-activate-tab-index "Fluid*Frame2*Table3*Frame1" 6)
+(cx-gui-do cx-activate-item "Fluid*Frame2*Table3*Frame1*Frame8(Source Terms)*Table1*Table1*Table5*PushButton2(Edit)")
+(cx-gui-do cx-set-integer-entry "Energy sources*Table1*IntegerEntry1(Number of Energy sources)" 1)
+(cx-gui-do cx-activate-item "Energy sources*Table1*IntegerEntry1(Number of Energy sources)")
+(cx-gui-do cx-set-expression-entry "Energy sources*Table1*Table2*Table1*ExpressionEntry1(1)" '("udf mc_energy_source::libudf" . 3))
+(cx-gui-do cx-activate-item "Energy sources*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Fluid*Frame2*Table3*Frame1*Frame8(Source Terms)*Table1*Table1*Table6*PushButton2(Edit)")
+(cx-gui-do cx-set-integer-entry "User Scalar 0 sources*Table1*IntegerEntry1(Number of User Scalar 0 sources)" 1)
+(cx-gui-do cx-activate-item "User Scalar 0 sources*Table1*IntegerEntry1(Number of User Scalar 0 sources)")
+(cx-gui-do cx-set-expression-entry "User Scalar 0 sources*Table1*Table2*Table1*ExpressionEntry1(1)" '("udf mc_latent_uds_0_source::libudf" . 3))
+(cx-gui-do cx-activate-item "User Scalar 0 sources*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Fluid*Frame2*Table3*Frame1*Frame8(Source Terms)*Table1*Table1*Table7*PushButton2(Edit)")
+(cx-gui-do cx-set-integer-entry "User Scalar 1 sources*Table1*IntegerEntry1(Number of User Scalar 1 sources)" 1)
+(cx-gui-do cx-activate-item "User Scalar 1 sources*Table1*IntegerEntry1(Number of User Scalar 1 sources)")
+(cx-gui-do cx-set-expression-entry "User Scalar 1 sources*Table1*Table2*Table1*ExpressionEntry1(1)" '("udf mc_latent_uds_1_source::libudf" . 3))
+(cx-gui-do cx-activate-item "User Scalar 1 sources*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Fluid*Frame2*Table3*Frame1*Frame8(Source Terms)*Table1*Table1*Table8*PushButton2(Edit)")
+(cx-gui-do cx-set-integer-entry "User Scalar 2 sources*Table1*IntegerEntry1(Number of User Scalar 2 sources)" 1)
+(cx-gui-do cx-activate-item "User Scalar 2 sources*Table1*IntegerEntry1(Number of User Scalar 2 sources)")
+(cx-gui-do cx-set-expression-entry "User Scalar 2 sources*Table1*Table2*Table1*ExpressionEntry1(1)" '("udf mc_latent_uds_2_source::libudf" . 3))
+(cx-gui-do cx-activate-item "User Scalar 2 sources*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Fluid*Frame2*Table3*Frame1*Frame8(Source Terms)*Table1*Table1*Table9*PushButton2(Edit)")
+(cx-gui-do cx-set-integer-entry "User Scalar 3 sources*Table1*IntegerEntry1(Number of User Scalar 3 sources)" 1)
+(cx-gui-do cx-activate-item "User Scalar 3 sources*Table1*IntegerEntry1(Number of User Scalar 3 sources)")
+(cx-gui-do cx-set-expression-entry "User Scalar 3 sources*Table1*Table2*Table1*ExpressionEntry1(1)" '("udf mc_latent_uds_3_source::libudf" . 3))
+(cx-gui-do cx-activate-item "User Scalar 3 sources*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Fluid*Frame2*Table3*Frame1*Frame8(Source Terms)*Table1*Table1*Table10*PushButton2(Edit)")
+(cx-gui-do cx-set-integer-entry "User Scalar 4 sources*Table1*IntegerEntry1(Number of User Scalar 4 sources)" 1)
+(cx-gui-do cx-activate-item "User Scalar 4 sources*Table1*IntegerEntry1(Number of User Scalar 4 sources)")
+(cx-gui-do cx-set-expression-entry "User Scalar 4 sources*Table1*Table2*Table1*ExpressionEntry1(1)" '("udf mc_latent_uds_4_source::libudf" . 3))
+(cx-gui-do cx-activate-item "User Scalar 4 sources*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Fluid*Frame2*Table3*Frame1*Frame8(Source Terms)*Table1*Table1*Table11*PushButton2(Edit)")
+(cx-gui-do cx-set-integer-entry "User Scalar 5 sources*Table1*IntegerEntry1(Number of User Scalar 5 sources)" 1)
+(cx-gui-do cx-activate-item "User Scalar 5 sources*Table1*IntegerEntry1(Number of User Scalar 5 sources)")
+(cx-gui-do cx-set-expression-entry "User Scalar 5 sources*Table1*Table2*Table1*ExpressionEntry1(1)" '("udf mc_latent_uds_5_source::libudf" . 3))
+(cx-gui-do cx-activate-item "User Scalar 5 sources*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Fluid*Frame2*Table3*Frame1*Frame8(Source Terms)*Table1*Table1*Table12*PushButton2(Edit)")
+(cx-gui-do cx-set-integer-entry "User Scalar 6 sources*Table1*IntegerEntry1(Number of User Scalar 6 sources)" 1)
+(cx-gui-do cx-activate-item "User Scalar 6 sources*Table1*IntegerEntry1(Number of User Scalar 6 sources)")
+(cx-gui-do cx-set-expression-entry "User Scalar 6 sources*Table1*Table2*Table1*ExpressionEntry1(1)" '("udf mc_latent_uds_6_source::libudf" . 3))
+(cx-gui-do cx-activate-item "User Scalar 6 sources*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Fluid*Frame2*Table3*Frame1*Frame8(Source Terms)*Table1*Table1*Table13*PushButton2(Edit)")
+(cx-gui-do cx-set-integer-entry "User Scalar 7 sources*Table1*IntegerEntry1(Number of User Scalar 7 sources)" 1)
+(cx-gui-do cx-activate-item "User Scalar 7 sources*Table1*IntegerEntry1(Number of User Scalar 7 sources)")
+(cx-gui-do cx-set-expression-entry "User Scalar 7 sources*Table1*Table2*Table1*ExpressionEntry1(1)" '("udf mc_latent_uds_7_source::libudf" . 3))
+(cx-gui-do cx-activate-item "User Scalar 7 sources*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Fluid*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Fluid*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-activate-item "MenuBar*WriteSubMenu*Case...")
+(cx-gui-do cx-set-file-dialog-entries "Select File" '( "2DGrid_D-0d09m_L-5m.cas.h5") "CFF Case Files (*.cas.h5 )")
+Fast-loading "C:\PROGRA~1\ANSYSI~1\v222\fluent\fluent22.2.0\\addons\afd\lib\hdfio.bin"
+Done.
+
+Writing to UG-17CB353:"C:/Users/mbonheur/OneDrive - UGent/Documenten/GitHub/SCARFS/2D Grid/2DGrid_D-0d09m_L-5m.cas.h5" in NODE0 mode and compression level 1 ...
+        9711 cells,     1 zone  ...
+       19710 faces,     4 zones ...
+       10000 nodes,     1 zone  ...
+  Done.
+Done.
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame5(Solution)*Table1*Table3(Run Calculation)*PushButton4(Check Case)")
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 1)
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 2)
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 3)
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 4)
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 0)
+
+Checking the case set-up ...
+
+
+Done
+(cx-gui-do cx-activate-item "Case Check*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame2(Domain)*Table1*Table3(Mesh)*PushButton4(Check)")
+(cx-gui-do cx-activate-item "MenuBar*PopupMenuCheck*Perform Mesh Check")
+
+ Domain Extents:
+   x-coordinate: min (m) = 0.000000e+00, max (m) = 5.000000e+00
+   y-coordinate: min (m) = 0.000000e+00, max (m) = 9.000000e-02
+ Volume statistics:
+WARNING: 9711 cells with non-positive volume detected.
+   minimum volume (m3): -1.333063e-04
+   maximum volume (m3): -2.008032e-06
+     total volume (m3): -4.500000e-01
+ Face area statistics:
+   minimum face area (m2): 1.000000e-04
+   maximum face area (m2): 2.008032e-02
+ Checking mesh..........
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3215 left-handed.
+WARNING: left-handed faces detected on zone   4:     0 right-handed,    39 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    84 left-handed..
+WARNING:  6512 face(s) on cell zone   2 with wrong node order (on 0)..........................
+Done.
+
+WARNING: Mesh check failed.
+
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3258 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    80 left-handed.
+WARNING:  6512 face(s) on cell zone   2 with wrong node order (on 1)
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3236 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    86 left-handed.
+WARNING:  6476 face(s) on cell zone   2 with wrong node order (on 2)
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3196 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    82 left-handed.
+WARNING:  6396 face(s) on cell zone   2 with wrong node order (on 3)
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3273 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    84 left-handed.
+WARNING:  6552 face(s) on cell zone   2 with wrong node order (on 4)
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3157 left-handed.
+WARNING: left-handed faces detected on zone   5:     0 right-handed,    39 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    82 left-handed.
+WARNING:  6396 face(s) on cell zone   2 with wrong node order (on 5)
+To get more detailed information about the mesh check failure
+increase the mesh check verbosity via the TUI command
+/mesh/check-verbosity.
+Fluent can also try to fix the mesh check problems via the TUI command
+/mesh/repair-improve/repair. (cx-gui-do cx-activate-item "Ribbon*Frame1*Frame2(Domain)*Table1*Table3(Mesh)*PushButton5(  Quality)")
+(cx-gui-do cx-activate-item "MenuBar*PopupMenuQuality*Improve Mesh Quality...")
+(cx-gui-do cx-activate-item "Improve Mesh*PanelButtons*PushButton1(OK)")
+
+Improving poor quality cells.
+ Considering worst   0.100000% of cells.
+ Identified  9711 cell(s) (out of 9711), 100.000000%, with orthogonal quality below   0.000488.
+Done.(cx-gui-do cx-activate-item "Improve Mesh*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame2(Domain)*Table1*Table3(Mesh)*PushButton4(Check)")
+(cx-gui-do cx-activate-item "MenuBar*PopupMenuCheck*Perform Mesh Check")
+
+ Domain Extents:
+   x-coordinate: min (m) = 0.000000e+00, max (m) = 5.000000e+00
+   y-coordinate: min (m) = 0.000000e+00, max (m) = 9.000000e-02
+ Volume statistics:
+WARNING: 9711 cells with non-positive volume detected.
+   minimum volume (m3): -1.333063e-04
+   maximum volume (m3): -2.008032e-06
+     total volume (m3): -4.500000e-01
+ Face area statistics:
+   minimum face area (m2): 1.000000e-04
+   maximum face area (m2): 2.008032e-02
+ Checking mesh..........
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3215 left-handed.
+WARNING: left-handed faces detected on zone   4:     0 right-handed,    39 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    84 left-handed..
+WARNING:  6512 face(s) on cell zone   2 with wrong node order (on 0)..........................
+Done.
+
+WARNING: Mesh check failed.
+
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3258 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    80 left-handed.
+WARNING:  6512 face(s) on cell zone   2 with wrong node order (on 1)
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3236 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    86 left-handed.
+WARNING:  6476 face(s) on cell zone   2 with wrong node order (on 2)
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3196 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    82 left-handed.
+WARNING:  6396 face(s) on cell zone   2 with wrong node order (on 3)
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3273 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    84 left-handed.
+WARNING:  6552 face(s) on cell zone   2 with wrong node order (on 4)
+WARNING: left-handed faces detected on zone   3:     0 right-handed,  3157 left-handed.
+WARNING: left-handed faces detected on zone   5:     0 right-handed,    39 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,    82 left-handed.
+WARNING:  6396 face(s) on cell zone   2 with wrong node order (on 5)
+To get more detailed information about the mesh check failure
+increase the mesh check verbosity via the TUI command
+/mesh/check-verbosity.
+Fluent can also try to fix the mesh check problems via the TUI command
+/mesh/repair-improve/repair. 
+adjoint/                parallel/               server/
+define/                 parametric-study/       solve/
+display/                plot/                   surface/
+exit                    preferences/            views/
+file/                   print-license-usage
+mesh/                   report/
+
+> /mesh/repair-improve/repair. invalid command [repair.]
+
+
+> /mesh/repair-improve/repair
+Trying to repair mesh:
+Repairing face node order.
+Repair_Axisymmetric_Mesh_Positivity: requires axisymmetric case.
+Handling of degenerated cells.
+Done.
+Please perform mesh check again.
+If problems persist you can try and repair again.
+If you enable the adjustment of boundary nodes via the TUI command 
+/mesh/repair/allow-repair-at-boundaries
+then a successful repair is more likely.
+> (cx-gui-do cx-activate-item "Ribbon*Frame1*Frame2(Domain)*Table1*Table3(Mesh)*PushButton4(Check)")
+(cx-gui-do cx-activate-item "MenuBar*PopupMenuCheck*Perform Mesh Check")
+
+ Domain Extents:
+   x-coordinate: min (m) = 0.000000e+00, max (m) = 5.000000e+00
+   y-coordinate: min (m) = 0.000000e+00, max (m) = 9.000000e-02
+ Volume statistics:
+   minimum volume (m3): 2.008032e-06
+   maximum volume (m3): 1.333063e-04
+     total volume (m3): 4.500000e-01
+ Face area statistics:
+   minimum face area (m2): 1.000000e-04
+   maximum face area (m2): 2.008032e-02
+ Checking mesh.....................................
+Done.
+ (cx-gui-do cx-activate-item "Ribbon*Frame1*Frame2(Domain)*Table1*Table3(Mesh)*PushButton4(Check)")
+(cx-gui-do cx-activate-item "MenuBar*PopupMenuCheck*Perform Mesh Check")
+
+ Domain Extents:
+   x-coordinate: min (m) = 0.000000e+00, max (m) = 5.000000e+00
+   y-coordinate: min (m) = 0.000000e+00, max (m) = 9.000000e-02
+ Volume statistics:
+   minimum volume (m3): 2.008032e-06
+   maximum volume (m3): 1.333063e-04
+     total volume (m3): 4.500000e-01
+ Face area statistics:
+   minimum face area (m2): 1.000000e-04
+   maximum face area (m2): 2.008032e-02
+ Checking mesh.....................................
+Done.
+ (cx-gui-do cx-activate-item "Ribbon*Frame1*Frame2(Domain)*Table1*Table3(Mesh)*PushButton5(  Quality)")
+(cx-gui-do cx-activate-item "MenuBar*PopupMenuQuality*Evaluate Mesh Quality")
+
+Mesh Quality:
+
+Minimum Orthogonal Quality =  1.00000e+00 cell -1 on zone -1 (ID: 0 on partition: 5) at location ( 0.00000e+00,  0.00000e+00)
+
+Maximum Aspect Ratio =  2.00806e+02 cell 1622 on zone 2 (ID: 1560 on partition: 0) at location ( 7.93173e-01,  8.99500e-02)
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame2(Domain)*Table1*Table3(Mesh)*PushButton6(Scale)")
+(cx-gui-do cx-activate-item "Scale Mesh*PanelButtons*PushButton1(Close)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame5(Solution)*Table1*Table3(Run Calculation)*PushButton4(Check Case)")
+
+Checking the case set-up ...
+
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 1)
+(cx-gui-do cx-activate-tab-index "Case Check*Table1*Frame1" 4)
+
+Done
+(cx-gui-do cx-activate-item "Case Check*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame5(Solution)*Table1*Table3(Solution)*PushButton1(Methods)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame5(Solution)*Table1*Table3(Controls)*PushButton4(Advanced)")
+(cx-gui-do cx-activate-tab-index "Advanced Solution Controls*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Advanced Solution Controls*Frame1" 1)
+(cx-gui-do cx-activate-tab-index "Advanced Solution Controls*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Advanced Solution Controls*Frame1" 2)
+(cx-gui-do cx-activate-tab-index "Advanced Solution Controls*Frame1" 0)
+(cx-gui-do cx-activate-tab-index "Advanced Solution Controls*Frame1" 2)
+(cx-gui-do cx-set-toggle-button2 "Advanced Solution Controls*Frame1*Frame3(Expert)*Frame2(Spatial Discretization Limiter)*Frame3*CheckButton1(Apply Limiter Filter)" #t)
+(cx-gui-do cx-activate-item "Advanced Solution Controls*Frame1*Frame3(Expert)*Frame2(Spatial Discretization Limiter)*Frame3*CheckButton1(Apply Limiter Filter)")
+(cx-gui-do cx-activate-item "Advanced Solution Controls*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame5(Solution)*Table1*Table3(Run Calculation)*PushButton4(Check Case)")
+
+Checking the case set-up ...
+
+
+Done
+(cx-gui-do cx-activate-item "Case Check*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Inlet|inlet (pressure-inlet, id=4)"))
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Inlet|inlet (pressure-inlet, id=4)"))
+(cx-gui-do cx-activate-item "NavigationPane*Frame2*Table1*List_Tree2")
+(cx-gui-do cx-set-list-tree-selections "NavigationPane*Frame2*Table1*List_Tree2" (list "Setup|Boundary Conditions|Inlet|inlet (pressure-inlet, id=4)"))
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 8)
+(cx-gui-do cx-set-list-selections "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList1(User Scalar 0)" '( 1))
+(cx-gui-do cx-enable-apply-button "Pressure Inlet")
+(cx-gui-do cx-activate-item "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList1(User Scalar 0)")
+(cx-gui-do cx-set-list-selections "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList2(User Scalar 1)" '( 1))
+(cx-gui-do cx-activate-item "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList2(User Scalar 1)")
+(cx-gui-do cx-set-list-selections "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList3(User Scalar 2)" '( 1))
+(cx-gui-do cx-activate-item "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList3(User Scalar 2)")
+(cx-gui-do cx-set-list-selections "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList4(User Scalar 3)" '( 1))
+(cx-gui-do cx-activate-item "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList4(User Scalar 3)")
+(cx-gui-do cx-set-list-selections "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList5(User Scalar 4)" '( 1))
+(cx-gui-do cx-activate-item "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList5(User Scalar 4)")
+(cx-gui-do cx-set-list-selections "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList6(User Scalar 5)" '( 1))
+(cx-gui-do cx-activate-item "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList6(User Scalar 5)")
+(cx-gui-do cx-set-list-selections "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList7(User Scalar 6)" '( 1))
+(cx-gui-do cx-activate-item "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList7(User Scalar 6)")
+(cx-gui-do cx-set-list-selections "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList8(User Scalar 7)" '( 1))
+(cx-gui-do cx-activate-item "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table1(User-Defined Scalar Boundary Condition)*DropDownList8(User Scalar 7)")
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table1*ExpressionEntry1(User Scalar 0)" '("-0.2187882324412" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table1*ExpressionEntry1(User Scalar 0)" '("-0.2187882324412" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table2*ExpressionEntry1(User Scalar 1)" '("0.8928432778053" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table2*ExpressionEntry1(User Scalar 1)" '("0.8928432778053" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table3*ExpressionEntry1(User Scalar 2)" '("-1.158003789864" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table3*ExpressionEntry1(User Scalar 2)" '("-1.158003789864" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table4*ExpressionEntry1(User Scalar 3)" '("-1.102002998834" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table4*ExpressionEntry1(User Scalar 3)" '("-1.102002998834" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table5*ExpressionEntry1(User Scalar 4)" '("1.666971712243" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table6*ExpressionEntry1(User Scalar 5)" '("2.679766277817" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table6*ExpressionEntry1(User Scalar 5)" '("2.679766277817" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table7*ExpressionEntry1(User Scalar 6)" '("0.2863626634167" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table7*ExpressionEntry1(User Scalar 6)" '("0.2863626634167" . 0))
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame9(UDS)*Table1*Table2(User-Defined Scalar Boundary Value)*Table8*ExpressionEntry1(User Scalar 7)" '("-0.1749978078611" . 0))
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 1)
+(cx-gui-do cx-set-expression-entry "Pressure Inlet*Frame2*Frame2*Frame2(Thermal)*Table1*Table1*ExpressionEntry1(Total Temperature)" '("1122.8276" . 0))
+(cx-gui-do cx-activate-tab-index "Pressure Inlet*Frame2*Frame2" 0)
+(cx-gui-do cx-activate-item "Pressure Inlet*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Pressure Inlet*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame5(Solution)*Table1*Table3(Initialization)*PushButton5(Initialize)")
+
+Performing preliminary standard initialization before hybrid initialization, in order to support evaluation of expressions and material property UDF.
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 0 PID 20524 RUNNING AT UG-17CB353
+=   EXIT STATUS: -1 (ffffffff)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 1 PID 19956 RUNNING AT UG-17CB353
+=   EXIT STATUS: -1 (ffffffff)
+===================================================================================
+ The fl process could not be started.
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 2 PID 22928 RUNNING AT UG-17CB353
+=   EXIT STATUS: -1 (ffffffff)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 3 PID 3860 RUNNING AT UG-17CB353
+=   EXIT STATUS: -1073741819 (c0000005)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 4 PID 17356 RUNNING AT UG-17CB353
+=   EXIT STATUS: -1 (ffffffff)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 5 PID 30940 RUNNING AT UG-17CB353
+=   EXIT STATUS: -1 (ffffffff)
+===================================================================================
+Done.
+
+> 
+Done.
+
+> /exit y
+Auto-Transcript Stop Time:  17:56:42, 10 Jul 2026 Romance Daylight Time 
+Total Transcript Time: 11 Minute 35 Second.

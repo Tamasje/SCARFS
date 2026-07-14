@@ -1,0 +1,186 @@
+{
+  "script_version": "identify_isothermal_empty_regions_r3_20k_max_physical_coverage_v6",
+  "n_existing_sampled": 1946031,
+  "n_cases_requested": 20000,
+  "max_new_cases_per_run": 20000,
+  "n_cases_designed": 18720,
+  "stopped_early_because_target_reached": false,
+  "T_range_K": [
+    800.0,
+    1600.0
+  ],
+  "pressure_range_Pa": [
+    150000.0,
+    350000.0
+  ],
+  "steam_to_ethane_mass_range": [
+    0.0,
+    1.0
+  ],
+  "tau_range_s": [
+    1e-05,
+    1.0
+  ],
+  "diameters_m": [
+    1e-05,
+    0.0306,
+    0.05,
+    0.1,
+    0.2,
+    0.5,
+    0.75,
+    1.0,
+    10.0
+  ],
+  "Re_range": [
+    0.001,
+    500000000.0
+  ],
+  "U_range_m_s": [
+    1e-08,
+    1000.0
+  ],
+  "state_probe_anchor_rows": 1946031,
+  "require_fallback_anchor_for_new_cases": true,
+  "new_candidates_skipped_no_valid_anchor": 0,
+  "candidate_overdraw_factor": 10.0,
+  "isothermal_case_feedback": {
+    "n_iso_feedback_cases": 5000,
+    "case_outcome_counts": {
+      "pfr_missed_target_replaced_by_probe": 3391,
+      "native_pfr_failure_replaced_by_probe": 1388,
+      "pfr_hit_target": 221
+    },
+    "n_unresolved_target_cases": 0,
+    "n_previous_no_anchor_cases": 2183,
+    "n_previous_successful_target_cases": 5000,
+    "unresolved_TX_bins": 0,
+    "unresolved_Ttau_bins": 0
+  },
+  "state_probe_composition_rule": "fallback_real_database_anchor_full_Y_vector_for_pfr_first_requests",
+  "L_range_m": [
+    1e-08,
+    10000.0
+  ],
+  "target_gap_min_bin_count": 4,
+  "target_log10_count": 2.3,
+  "effective_target_count_per_T_X_bin": 199,
+  "target_ttau_log10_count": 2.3,
+  "effective_target_count_per_T_logtau_bin": 199,
+  "ttau_logtau_bin_width_decades": 0.25,
+  "budget_limited": true,
+  "tx_T_bin_width_K": 50.0,
+  "tx_X_bin_width": 0.05,
+  "under_target_bins_before": 153,
+  "under_target_bins_after_design": 0,
+  "empty_bins_before": 0,
+  "empty_bins_after_design": 0,
+  "total_TX_deficit_before": 18720,
+  "total_TX_deficit_after_design": 0,
+  "under_target_Ttau_bins_before": 90,
+  "under_target_Ttau_bins_after_design": 57,
+  "empty_Ttau_bins_before": 0,
+  "empty_Ttau_bins_after_design": 0,
+  "total_Ttau_deficit_before": 7153,
+  "total_Ttau_deficit_after_design": 2227,
+  "pfr_tau_ratio_min": 0.2,
+  "pfr_tau_ratio_max": 5.0,
+  "reachability_classification": "deferred_to_generate_database_Isothermal_CRACKSIM_PFR_attempt",
+  "tau_physicality_flag_counts": {
+    "pending_cracksim_pfr_reachability_check": 18720
+  },
+  "tau_over_tau_estimate_quantiles": "not_used_pfr_first_no_arrhenius",
+  "round_summaries": [
+    {
+      "round": 0,
+      "status": "added",
+      "cases_added": 2500,
+      "candidate_bins_considered": 18720,
+      "skipped_no_valid_anchor": 0,
+      "underfilled_bins_after_round": 150,
+      "total_deficit_after_round": 16220
+    },
+    {
+      "round": 1,
+      "status": "added",
+      "cases_added": 2500,
+      "candidate_bins_considered": 16220,
+      "skipped_no_valid_anchor": 0,
+      "underfilled_bins_after_round": 143,
+      "total_deficit_after_round": 13720
+    },
+    {
+      "round": 2,
+      "status": "added",
+      "cases_added": 2500,
+      "candidate_bins_considered": 13720,
+      "skipped_no_valid_anchor": 0,
+      "underfilled_bins_after_round": 139,
+      "total_deficit_after_round": 11220
+    },
+    {
+      "round": 3,
+      "status": "added",
+      "cases_added": 2500,
+      "candidate_bins_considered": 11220,
+      "skipped_no_valid_anchor": 0,
+      "underfilled_bins_after_round": 129,
+      "total_deficit_after_round": 8720
+    },
+    {
+      "round": 4,
+      "status": "added",
+      "cases_added": 2500,
+      "candidate_bins_considered": 8720,
+      "skipped_no_valid_anchor": 0,
+      "underfilled_bins_after_round": 120,
+      "total_deficit_after_round": 6220
+    },
+    {
+      "round": 5,
+      "status": "added",
+      "cases_added": 2500,
+      "candidate_bins_considered": 6220,
+      "skipped_no_valid_anchor": 0,
+      "underfilled_bins_after_round": 109,
+      "total_deficit_after_round": 3720
+    },
+    {
+      "round": 6,
+      "status": "added",
+      "cases_added": 2500,
+      "candidate_bins_considered": 3720,
+      "skipped_no_valid_anchor": 0,
+      "underfilled_bins_after_round": 70,
+      "total_deficit_after_round": 1220
+    },
+    {
+      "round": 7,
+      "status": "added",
+      "cases_added": 1220,
+      "candidate_bins_considered": 1220,
+      "skipped_no_valid_anchor": 0,
+      "underfilled_bins_after_round": 0,
+      "total_deficit_after_round": 0
+    }
+  ],
+  "region_counts": {
+    "global_sparse_tx": 10415,
+    "global_high_temperature_1400_1600": 4618,
+    "gap_800_1000_high_conversion": 3687
+  },
+  "kind_counts": {
+    "pfr_first_request": 18720
+  },
+  "input_parquets_used": [
+    "out_v2\\full.parquet",
+    "out_v2\\offmanifold_1000000.parquet",
+    "C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\out_v2_iso_r1\\isothermal_enrichment_cracksim.parquet",
+    "C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\out_v2_iso_r2\\isothermal_enrichment_cracksim.parquet"
+  ],
+  "isothermal_parquets_used": [
+    "C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\out_v2_iso_r1\\isothermal_enrichment_cracksim.parquet",
+    "C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\out_v2_iso_r2\\isothermal_enrichment_cracksim.parquet"
+  ],
+  "isothermal_case_feedback_used": true
+}

@@ -1,0 +1,124 @@
+{
+  "script_version": "visualize_isothermal_enrichment_coverage_v3_multi_iso_rstar",
+  "inputs": {
+    "original": [
+      "out_v2\\full.parquet",
+      "out_v2\\offmanifold_1000000.parquet"
+    ],
+    "isothermal": [
+      "out_v2_iso_r1\\isothermal_enrichment_cracksim.parquet",
+      "out_v2_iso_r2\\isothermal_enrichment_cracksim.parquet",
+      "out_v2_iso_r3\\isothermal_enrichment_cracksim.parquet"
+    ]
+  },
+  "window": {
+    "T_min_K": 800.0,
+    "T_max_K": 1600.0,
+    "tau_min_s": 1e-05,
+    "tau_max_s": 1.0
+  },
+  "scan_metrics": {
+    "original": {
+      "group": "original",
+      "paths": [
+        {
+          "path": "out_v2\\full.parquet",
+          "metadata_rows": 749001,
+          "scanned_rows": 749001,
+          "rows_inside_requested_window": 726491
+        },
+        {
+          "path": "out_v2\\offmanifold_1000000.parquet",
+          "metadata_rows": 1000000,
+          "scanned_rows": 1000000,
+          "rows_inside_requested_window": 0
+        }
+      ],
+      "scanned_rows": 1749001,
+      "rows_inside_requested_window": 726491
+    },
+    "isothermal": {
+      "group": "isothermal",
+      "paths": [
+        {
+          "path": "out_v2_iso_r1\\isothermal_enrichment_cracksim.parquet",
+          "metadata_rows": 105065,
+          "scanned_rows": 105065,
+          "rows_inside_requested_window": 52285
+        },
+        {
+          "path": "out_v2_iso_r2\\isothermal_enrichment_cracksim.parquet",
+          "metadata_rows": 91965,
+          "scanned_rows": 91965,
+          "rows_inside_requested_window": 82293
+        },
+        {
+          "path": "out_v2_iso_r3\\isothermal_enrichment_cracksim.parquet",
+          "metadata_rows": 391830,
+          "scanned_rows": 391830,
+          "rows_inside_requested_window": 343767
+        }
+      ],
+      "scanned_rows": 588860,
+      "rows_inside_requested_window": 478345
+    }
+  },
+  "TX_coverage": {
+    "total_bins": 320,
+    "occupied_before": 99,
+    "occupied_after": 319,
+    "empty_before": 221,
+    "empty_after": 1,
+    "newly_occupied_by_isothermal": 220,
+    "isothermal_bins_occupied": 319,
+    "isothermal_rows_in_previously_empty_bins": 112890,
+    "isothermal_rows_in_previously_occupied_bins": 365455,
+    "under_target_before": 251,
+    "under_target_after": 64,
+    "isothermal_rows_in_under_target_before_bins": 149660
+  },
+  "Ttau_coverage": {
+    "total_bins": 320,
+    "occupied_before": 184,
+    "occupied_after": 320,
+    "empty_before": 136,
+    "empty_after": 0,
+    "newly_occupied_by_isothermal": 136,
+    "isothermal_bins_occupied": 266,
+    "isothermal_rows_in_previously_empty_bins": 119928,
+    "isothermal_rows_in_previously_occupied_bins": 358417,
+    "under_target_before": 183,
+    "under_target_after": 16,
+    "isothermal_rows_in_under_target_before_bins": 241023
+  },
+  "isothermal_case_metrics": {
+    "n_cases_with_isothermal_rows": 28423,
+    "case_level_outcome_counts": {
+      "PFR missed \u2192 state probe": 21444,
+      "Native PFR failed \u2192 state probe": 4423,
+      "PFR missed \u2192 no suitable anchor": 2183,
+      "PFR missed \u2192 no probe/unknown": 373
+    },
+    "case_level_probe_used_cases": 25867,
+    "case_level_unfilled_cases": 2556,
+    "case_sample_kind_patterns": {
+      "('state_probe', 'trajectory')": 21444,
+      "('state_probe',)": 4423,
+      "('trajectory',)": 2556
+    },
+    "case_final_design_kind_counts": {
+      "isothermal_pfr_missed_target": 23627,
+      "anchored_state_probe_after_pfr_miss": 21444,
+      "anchored_state_probe_after_native_pfr_failure": 4423,
+      "isothermal_pfr_hit_target": 373
+    },
+    "pfr_hit_cases": 373,
+    "pfr_hit_fraction": 0.013123174893572107,
+    "fallback_status_case_counts": {
+      "<NA>": 21817,
+      "used_after_pfr_miss": 21444,
+      "used_after_native_pfr_failure": 4423,
+      "no_suitable_anchor_available": 2183
+    }
+  }
+}

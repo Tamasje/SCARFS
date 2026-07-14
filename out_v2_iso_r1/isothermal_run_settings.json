@@ -1,0 +1,31 @@
+{
+  "script_version": "generate_database_Isothermal_final_fast_v3native_pfr_first_fallback_v7_native_failure_to_state_probe",
+  "args": {
+    "manifest": "out_balanced_iso_r1/isothermal_enrichment_manifest.csv",
+    "schema_reference": "out_v2/full.parquet",
+    "out": "out_v2_iso_r1",
+    "out_name": "isothermal_enrichment_cracksim",
+    "n_cpu": 8,
+    "n_points": 1200,
+    "pfr_ode_steps": null,
+    "rtol": 1e-09,
+    "atol": 1e-16,
+    "max_frac_jump": 0.03,
+    "skip_existing": true,
+    "merge_only": false,
+    "gates": false,
+    "limit_cases": null,
+    "progress_every": 50,
+    "print_cases": false,
+    "allow_drops": false,
+    "keep_extra_columns": true,
+    "T_hard_max_K": 1600.0,
+    "pressure_min_Pa": 150000.0,
+    "pressure_max_Pa": 350000.0,
+    "steam_ethane_min_mass": 0.0,
+    "steam_ethane_max_mass": 1.0,
+    "default_diameter_m": 0.0306,
+    "default_target_Re": 100000.0
+  },
+  "n_cases_to_solve": 2822
+}

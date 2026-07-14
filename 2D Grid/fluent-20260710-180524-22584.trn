@@ -1,0 +1,286 @@
+Auto-Transcript Start Time:  18:05:24, 10 Jul 2026 Romance Daylight Time 
+Current Directory: "C:\Users\mbonheur\OneDrive - UGent\Documenten\GitHub\SCARFS\2D Grid"
+
+              Welcome to ANSYS Fluent 2022 R2
+
+              Copyright 1987-2022 ANSYS, Inc. All Rights Reserved.
+              Unauthorized use, distribution or duplication is prohibited.
+              This product is subject to U.S. laws governing export and re-export.
+              For full Legal Notice, see documentation.
+
+Build Time: Nov 10 2022 18:43:09 EDT  Build Id: 10213  
+ 
+Connected License Server List:	1055@ir03lic1.ugent.be
+
+*********************************************
+Info: Your license enables 4-way parallel execution.
+For faster simulations, please start the application with the appropriate parallel options.
+*********************************************
+
+
+     --------------------------------------------------------------
+     This is an academic version of ANSYS FLUENT. Usage of this product
+     license is limited to the terms and conditions specified in your ANSYS
+     license form, additional terms section.
+     --------------------------------------------------------------
+Host spawning Node 0 on machine "UG-17CB353" (win64).
+
+-------------------------------------------------------------------------------
+ID    Hostname    Core  O.S.         PID    Vendor                          
+-------------------------------------------------------------------------------
+n0    UG-17CB353  1/12  Windows-x64  10156  Intel(R) Core(TM) i7-9850H      
+host  UG-17CB353        Windows-x64  18172  Intel(R) Core(TM) i7-9850H      
+
+MPI Option Selected: intel
+-------------------------------------------------------------------------------
+
+Cleanup script file is C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\cleanup-fluent-UG-17CB353-18172.bat
+
+> (cx-gui-do cx-activate-item "MenuBar*ReadSubMenu*Case...")
+(cx-gui-do cx-set-file-dialog-entries "Select File" '( "2DGrid_D-0d09m_L-5m.cas.h5") "CFF Case Files (*.cas.h5 *.msh.h5 *.MSH.h5 )")
+Fast-loading "C:\PROGRA~1\ANSYSI~1\v222\fluent\fluent22.2.0\\addons\afd\lib\hdfio.bin"
+Done.
+
+UG-17CB353 is already loaded (33.9952).                       Process affinity not being set.
+
+Reading from UG-17CB353:"C:/Users/mbonheur/OneDrive - UGent/Documenten/GitHub/SCARFS/2D Grid/2DGrid_D-0d09m_L-5m.cas.h5" in NODE0 mode ...
+  Reading mesh ...
+        9711 cells,     1 cell zone  ...
+           9711 quadrilateral cells,  zone id: 2
+       19710 faces,     4 face zones ...
+          19134 2D interior faces,  zone id: 3
+             39 2D pressure-inlet faces,  zone id: 4
+             39 2D pressure-outlet faces,  zone id: 5
+            498 2D wall faces,  zone id: 6
+       10000 nodes,     1 node zone  ...
+Warning: reading 6 partition grid onto 1 compute node machine.
+         Combining every 6 partitions.
+  Done.
+
+
+Checking the existence of compiled "libudf" UDF library for current platform.
+If needed will attempt auto-compilation...
+
+ 	 Make sure that UDF source files are in the directory 
+ 	 that contains your case and data files. If you have 
+ 	 an existing libudf directory, please remove this 
+ 	 directory to ensure that latest files are used. 
+  
+
+Will now auto-compile UDF library "libudf".
+Copied C:\Users\mbonheur\OneDrive - UGent\Documenten\GitHub\SCARFS\2D Grid/C:\Users\mbonheur\OneDrive - UGent\Documenten\GitHub\SCARFS\2D Grid\merged_coil_udf.c to libudf\\src
+Copied C:\Users\mbonheur\OneDrive - UGent\Documenten\GitHub\SCARFS\2D Grid/C:\Users\mbonheur\OneDrive - UGent\Documenten\GitHub\SCARFS\2D Grid\merged_coil_udf.h to libudf\\src
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\sconstruct.udf "libudf\\win64\2ddp_host\SConstruct" ")
+        1 file(s) copied.
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\scons_default.bat "libudf\\win64\2ddp_host\scons_test.bat" ")
+        1 file(s) copied.
+Files udf_names.c and user_nt.udf in 2ddp_host are up-to-date.
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\makefile_nt.udf "libudf\\win64\2ddp_host\makefile" ")
+        1 file(s) copied.
+(chdir "libudf")(chdir "win64\\2ddp_host")
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_host>rem  
+
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_host>rem  Copyright 1987-2022 ANSYS, Inc. All Rights Reserved. 
+
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_host>rem  
+Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30157 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+usage: cl [ option... ] filename... [ /link linkoption... ]
+
+Microsoft (R) Program Maintenance Utility Version 14.29.30157.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\sconstruct.udf "libudf\\win64\2ddp_node\SConstruct" ")
+        1 file(s) copied.
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\scons_default.bat "libudf\\win64\2ddp_node\scons_test.bat" ")
+        1 file(s) copied.
+Files udf_names.c and user_nt.udf in 2ddp_node are up-to-date.
+(system "copy "C:\PROGRA~1\ANSYSI~1\v222\fluent"\fluent22.2.0\src\udf\makefile_nt.udf "libudf\\win64\2ddp_node\makefile" ")
+        1 file(s) copied.
+(chdir "libudf")(chdir "win64\\2ddp_node")
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_node>rem  
+
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_node>rem  Copyright 1987-2022 ANSYS, Inc. All Rights Reserved. 
+
+C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf\\win64\\2ddp_node>rem  
+Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30157 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+usage: cl [ option... ] filename... [ /link linkoption... ]
+
+Microsoft (R) Program Maintenance Utility Version 14.29.30157.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Done.
+
+UG-17CB353: Opening library "C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf"...Done.
+
+UG-17CB353: Opening library "C:\\Users\\mbonheur\\OneDrive - UGent\\Documenten\\GitHub\\SCARFS\\2D Grid\\libudf"...
+	mc_specific_heat
+	mc_density
+	mc_speed_of_sound
+	mc_manifold_project
+	mc_energy_source
+	mc_viscosity
+	mc_thermal_conductivity
+	mc_latent_uds_0_source
+	mc_latent_uds_1_source
+	mc_latent_uds_2_source
+	mc_latent_uds_3_source
+	mc_latent_uds_4_source
+	mc_latent_uds_5_source
+	mc_latent_uds_6_source
+	mc_latent_uds_7_source
+Done.
+
+Building...
+     mesh
+Info: The mesh contains elements that are invalid or of poor quality.
+
+      A different numerical scheme will be applied to these elements,
+      which may affect the quality of the solution. It is recommended
+      that you consider removing the invalid and poor quality elements
+      in the mesh.
+
+      For more information on the invalid and poor quality elements,
+      please use the following TUI commands:
+
+      /mesh/check
+      /mesh/repair-improve/report-poor-elements.
+WARNING: 9711 cells with non-positive volume detected.
+     materials,
+     interface,
+     domains,
+	mixture
+     zones,
+	wall
+	outlet
+	inlet
+	interior-unspecified
+	unspecified
+     parallel,
+Done.
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame2(Domain)*Table1*Table3(Mesh)*PushButton4(Check)")
+(cx-gui-do cx-activate-item "MenuBar*PopupMenuCheck*Perform Mesh Check")
+
+ Domain Extents:
+   x-coordinate: min (m) = 0.000000e+00, max (m) = 5.000000e+00
+   y-coordinate: min (m) = 0.000000e+00, max (m) = 9.000000e-02
+ Volume statistics:
+WARNING: 9711 cells with non-positive volume detected.
+   minimum volume (m3): -1.333063e-04
+   maximum volume (m3): -2.008032e-06
+     total volume (m3): -4.500000e-01
+ Face area statistics:
+   minimum face area (m2): 1.000000e-04
+   maximum face area (m2): 2.008032e-02
+ Checking mesh..........
+WARNING: left-handed faces detected on zone   3:     0 right-handed, 19134 left-handed.
+WARNING: left-handed faces detected on zone   4:     0 right-handed,    39 left-handed.
+WARNING: left-handed faces detected on zone   5:     0 right-handed,    39 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,   498 left-handed..
+WARNING: 38844 face(s) on cell zone   2 with wrong node order (on 0).................
+Done.
+
+WARNING: Mesh check failed.
+
+To get more detailed information about the mesh check failure
+increase the mesh check verbosity via the TUI command
+/mesh/check-verbosity.
+Fluent can also try to fix the mesh check problems via the TUI command
+/mesh/repair-improve/repair. 
+adjoint/                parallel/               server/
+define/                 parametric-study/       solve/
+display/                plot/                   surface/
+exit                    preferences/            views/
+file/                   print-license-usage
+mesh/                   report/
+
+> /mesh/repair-improve/repair. invalid command [repair.]
+
+
+> (cx-gui-do cx-activate-item "Ribbon*Frame1*Frame2(Domain)*Table1*Table3(Mesh)*PushButton4(Check)")
+(cx-gui-do cx-activate-item "MenuBar*PopupMenuCheck*Perform Mesh Check")
+
+ Domain Extents:
+   x-coordinate: min (m) = 0.000000e+00, max (m) = 5.000000e+00
+   y-coordinate: min (m) = 0.000000e+00, max (m) = 9.000000e-02
+ Volume statistics:
+WARNING: 9711 cells with non-positive volume detected.
+   minimum volume (m3): -1.333063e-04
+   maximum volume (m3): -2.008032e-06
+     total volume (m3): -4.500000e-01
+ Face area statistics:
+   minimum face area (m2): 1.000000e-04
+   maximum face area (m2): 2.008032e-02
+ Checking mesh..........
+WARNING: left-handed faces detected on zone   3:     0 right-handed, 19134 left-handed.
+WARNING: left-handed faces detected on zone   4:     0 right-handed,    39 left-handed.
+WARNING: left-handed faces detected on zone   5:     0 right-handed,    39 left-handed.
+WARNING: left-handed faces detected on zone   6:     0 right-handed,   498 left-handed..
+WARNING: 38844 face(s) on cell zone   2 with wrong node order (on 0).................
+Done.
+
+WARNING: Mesh check failed.
+
+To get more detailed information about the mesh check failure
+increase the mesh check verbosity via the TUI command
+/mesh/check-verbosity.
+Fluent can also try to fix the mesh check problems via the TUI command
+/mesh/repair-improve/repair. 
+adjoint/                parallel/               server/
+define/                 parametric-study/       solve/
+display/                plot/                   surface/
+exit                    preferences/            views/
+file/                   print-license-usage
+mesh/                   report/
+
+> /mesh/repair-improve/repair
+Trying to repair mesh:
+Repairing face node order.
+Repair_Axisymmetric_Mesh_Positivity: requires axisymmetric case.
+Handling of degenerated cells.
+Done.
+Please perform mesh check again.
+If problems persist you can try and repair again.
+If you enable the adjustment of boundary nodes via the TUI command 
+/mesh/repair/allow-repair-at-boundaries
+then a successful repair is more likely.
+> (cx-gui-do cx-activate-item "Ribbon*Frame1*Frame2(Domain)*Table1*Table3(Mesh)*PushButton4(Check)")
+(cx-gui-do cx-activate-item "MenuBar*PopupMenuCheck*Perform Mesh Check")
+
+ Domain Extents:
+   x-coordinate: min (m) = 0.000000e+00, max (m) = 5.000000e+00
+   y-coordinate: min (m) = 0.000000e+00, max (m) = 9.000000e-02
+ Volume statistics:
+   minimum volume (m3): 2.008032e-06
+   maximum volume (m3): 1.333063e-04
+     total volume (m3): 4.500000e-01
+ Face area statistics:
+   minimum face area (m2): 1.000000e-04
+   maximum face area (m2): 2.008032e-02
+ Checking mesh............................
+Done.
+ (cx-gui-do cx-activate-item "Ribbon*Frame1*Frame4(User-Defined)*Table1*Table3(User Defined)*PushButton1(Functions)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame4(User-Defined)*Table1*Table3(User Defined)*PushButton3(Function Hooks)")
+(cx-gui-do cx-activate-item "User-Defined Function Hooks*Table1*PushButton5(Edit)")
+(cx-gui-do cx-set-list-selections "Adjust Functions*Table1*List2(Selected Adjust Functions)" '( 0))
+(cx-gui-do cx-activate-item "Adjust Functions*Table1*List2(Selected Adjust Functions)")
+(cx-gui-do cx-activate-item "Adjust Functions*Table1*Table3*PushButton2(Remove)")
+(cx-gui-do cx-activate-item "Adjust Functions*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "User-Defined Function Hooks*PanelButtons*PushButton1(OK)")
+(cx-gui-do cx-activate-item "Ribbon*Frame1*Frame5(Solution)*Table1*Table3(Initialization)*PushButton5(Initialize)")
+ The fl process could not be started.
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 0 PID 10156 RUNNING AT UG-17CB353
+=   EXIT STATUS: -1073741819 (c0000005)
+===================================================================================
+Done.
+
+> (cx-gui-do cx-activate-item "MenuBar*FileMenu*Exit")
+Auto-Transcript Stop Time:  18:09:19, 10 Jul 2026 Romance Daylight Time 
+Total Transcript Time: 3 Minute 55 Second.
