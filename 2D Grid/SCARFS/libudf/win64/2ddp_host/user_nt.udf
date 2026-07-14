@@ -1,0 +1,5 @@
+CSOURCES= $(SRC)merged_coil_udf.c
+HSOURCES= $(SRC)merged_coil_udf.h
+VERSION=2ddp_host
+PARALLEL_NODE=none
+GPU_SUPPORT=off

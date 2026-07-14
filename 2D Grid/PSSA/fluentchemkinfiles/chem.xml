@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<!-- DOCTYPE chemistrydata SYSTEM "chemistrydata.dtd" -->
+<chemistryset date="2026/07/14" time="15:13:33" release="4.5.0">
+<workspace CKSTRT="207" SKSTRT="212" MCSTRT="40"/>
+<gasphase>
+<speciesset type="unused gas species in gas chemistry">
+<species name="H2">
+</species>
+<species name="CH4">
+</species>
+<species name="C2H6">
+</species>
+<species name="C3H8">
+</species>
+<species name="NC4H10">
+</species>
+<species name="BENZENE">
+</species>
+<species name="TOLUENE">
+</species>
+<species name="XYLENES">
+</species>
+<species name="NAPHTHALENE">
+</species>
+<species name="CHD14">
+</species>
+<species name="C2H4">
+</species>
+<species name="C3H6">
+</species>
+<species name="C4H6_1_3">
+</species>
+<species name="C4H8_1">
+</species>
+<species name="C4H8_2">
+</species>
+<species name="C5DIOL_1_4">
+</species>
+<species name="C5H10_1">
+</species>
+<species name="C5H10_2">
+</species>
+<species name="CPD">
+</species>
+<species name="ME-CPD">
+</species>
+<species name="STYRENE">
+</species>
+<species name="ME-INDENE">
+</species>
+<species name="NAROL-C11">
+</species>
+<species name="C4H6_1_2">
+</species>
+<species name="FULVENE">
+</species>
+<species name="C4H4">
+</species>
+<species name="CH2*CPENE">
+</species>
+<species name="C2H2">
+</species>
+<species name="C3H4_MA">
+</species>
+<species name="C3H4_PD">
+</species>
+<species name="H2O">
+</species>
+</speciesset>
+</gasphase>
+</chemistryset>

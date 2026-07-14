@@ -1,0 +1,84 @@
+
+
+     *****************************************************************
+     *               FLUENT/CHEMKIN-CFD Release 20102                *
+     *                       CHEM Application                        *
+     *                GAS-PHASE MECHANISM INTERPRETER                *
+     *                 Copyright(c) 2022 ANSYS, Inc.                 *                
+     *Run Date and Time: Jul 14, 2026   15:13:32     120 min from UTC*
+     *****************************************************************
+
+
+
+LICENSE INFORMATION: 
+ 
+
+LicNum: unknown                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+
+                WORKING SPACE REQUIREMENTS
+                 PROVIDED        REQUIRED 
+ LOGICAL               31             31
+ INTEGER              810            810
+ REAL               12384          12384
+ CHARACTER             80             80
+
+This problem requires      0.094MB of memory for the REAL array.
+                          --------------------
+                          ELEMENTS     ATOMIC
+                          CONSIDERED   WEIGHT
+                          --------------------
+                           1. C       12.0112    
+                           2. H       1.00797    
+                           3. O       15.9994    
+                           4. N       14.0067    
+                          --------------------
+ -------------------------------------------------------------------------------
+                            C
+                         P  H
+                         H  A
+                         A  R
+ SPECIES                 S  G  MOLECULAR  TEMPERATURE  ELEMENT COUNT
+ CONSIDERED              E  E  WEIGHT     LOW    HIGH          C         H         O         N 
+ -------------------------------------------------------------------------------
+     1. H2               G  0 2.0159E+00   300   5000          0         2         0         0
+     2. CH4              G  0 1.6043E+01   300   5000          1         4         0         0
+     3. C2H6             G  0 3.0070E+01   300   5000          2         6         0         0
+     4. C3H8             G  0 4.4097E+01   300   5000          3         8         0         0
+     5. NC4H10           G  0 5.8124E+01   300   5000          4        10         0         0
+     6. BENZENE          G  0 7.8115E+01   300   5000          6         6         0         0
+     7. TOLUENE          G  0 9.2142E+01   300   5000          7         8         0         0
+     8. XYLENES          G  0 1.0617E+02   300   5000          8        10         0         0
+     9. NAPHTHALENE      G  0 1.2818E+02   300   5000         10         8         0         0
+    10. CHD14            G  0 8.0131E+01   300   5000          6         8         0         0
+    11. C2H4             G  0 2.8054E+01   300   5000          2         4         0         0
+    12. C3H6             G  0 4.2081E+01   300   5000          3         6         0         0
+    13. C4H6_1_3         G  0 5.4092E+01   300   5000          4         6         0         0
+    14. C4H8_1           G  0 5.6108E+01   300   5000          4         8         0         0
+    15. C4H8_2           G  0 5.6108E+01   300   5000          4         8         0         0
+    16. C5DIOL_1_4       G  0 6.8120E+01   300   5000          5         8         0         0
+    17. C5H10_1          G  0 7.0135E+01   300   5000          5        10         0         0
+    18. C5H10_2          G  0 7.0135E+01   300   5000          5        10         0         0
+    19. CPD              G  0 6.6104E+01   300   5000          5         6         0         0
+    20. ME-CPD           G  0 8.0131E+01   300   5000          6         8         0         0
+    21. STYRENE          G  0 1.0415E+02   300   5000          8         8         0         0
+    22. ME-INDENE        G  0 1.3019E+02   300   5000         10        10         0         0
+    23. NAROL-C11        G  0 1.4422E+02   300   5000         11        12         0         0
+    24. C4H6_1_2         G  0 5.4092E+01   300   5000          4         6         0         0
+    25. FULVENE          G  0 7.8115E+01   300   5000          6         6         0         0
+    26. C4H4             G  0 5.2076E+01   300   5000          4         4         0         0
+    27. CH2*CPENE        G  0 8.0131E+01   300   5000          6         8         0         0
+    28. C2H2             G  0 2.6038E+01   300   5000          2         2         0         0
+    29. C3H4_MA          G  0 4.0065E+01   300   5000          3         4         0         0
+    30. C3H4_PD          G  0 4.0065E+01   300   5000          3         4         0         0
+    31. H2O              G  0 1.8015E+01   300   5000          0         2         1         0
+ -------------------------------------------------------------------------------
+
+
+
+ NO ERRORS FOUND ON INPUT: 
+ ASCII Vers. 4.5.0 CHEMKIN linkfile chem.asc written.
+
+ GAS PHASE WORKING SPACE REQUIREMENTS ARE
+    INTEGER:        319
+    REAL:           757
+    CHARACTER:       36

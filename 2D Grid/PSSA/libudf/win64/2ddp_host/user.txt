@@ -1,0 +1,6 @@
+VERSION='2ddp_host'
+FLUENT_ARCH='win64'
+FLUENT_RELEASE='fluent22.2.0'
+CSOURCES=' $(SRC)Ethane_Reduction1_ForwardOnly_ArrayNotation-Clustering_Methane_PoE_Windows_Corrected_MAX4000.c'
+HSOURCES=''
+GPU_SUPPORT='off'
